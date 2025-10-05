@@ -17,7 +17,6 @@ function RegVegetablePage() {
     productImage: null,
   });
 
-  // --- New states for editing ---
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
 
@@ -83,7 +82,6 @@ function RegVegetablePage() {
       }
 
       const addedProduct = await response.json();
-      // Ensure productImage URL is correct
       const updatedProducts = [...products, addedProduct];
       setProducts(updatedProducts);
       setFilteredProducts(updatedProducts);
@@ -94,7 +92,6 @@ function RegVegetablePage() {
     }
   };
 
-  // --- Edit handlers ---
   const handleEditClick = (product) => {
     setEditProduct(product);
     setIsEditModalOpen(true);
@@ -135,7 +132,6 @@ function RegVegetablePage() {
     }
   };
 
-  // --- Delete handler ---
   const handleDeleteProduct = async (productId) => {
     if (!window.confirm("Are you sure you want to delete this product?")) return;
 
@@ -194,7 +190,6 @@ function RegVegetablePage() {
                 )}`}
                 className="product-item-veg-link"
               >
-                {/* Fixed image URL */}
                 <img
                   src={`http://localhost:8070${product.productImage}`}
                   alt={product.productName}
