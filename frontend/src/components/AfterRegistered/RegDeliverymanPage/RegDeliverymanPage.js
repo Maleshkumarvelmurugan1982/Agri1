@@ -33,7 +33,7 @@ function RegDeliverymanPage({ deliverymanId }) {
         const farmerResponse = await axios.get("http://localhost:8070/farmerorder/");
         setFarmerOrders(farmerResponse.data ?? []);
 
-        // Fetch salary from new backend endpoint
+        // Fetch salary from backend
         if (deliverymanId) {
           const salaryResponse = await axios.get(`http://localhost:8070/salary/${deliverymanId}`);
           setSalary(salaryResponse.data.salary ?? 0);
@@ -114,11 +114,15 @@ function RegDeliverymanPage({ deliverymanId }) {
 
       <div className="orders-wrapper">
         <div className="orders-container">
-          {sellerOrders.slice(0, 4).map((order, index) => (
+          {sellerOrders.slice(0, 4).map((_, index) => (
             <div key={index} className="order-item">
-              <img src={order.productImage} alt={order.item} className="order-image" />
-              <p>{order.item}</p>
-              <p>Quantity: {order.quantity}</p>
+              <img
+                src={`http://localhost:8070${sellerOrders[index].productImage}`}
+                alt={sellerOrders[index].item}
+                className="order-image"
+              />
+              <p>{sellerOrders[index].item}</p>
+              <p>Quantity: {sellerOrders[index].quantity}</p>
               <p>Pickup: Seller</p>
               <p>Deliver To: Buyer</p>
               <button className="cart-button">
@@ -146,11 +150,15 @@ function RegDeliverymanPage({ deliverymanId }) {
 
       <div className="orders-wrapper">
         <div className="orders-container">
-          {farmerOrders.slice(0, 4).map((order, index) => (
+          {farmerOrders.slice(0, 4).map((_, index) => (
             <div key={index} className="order-item">
-              <img src={order.productImage} alt={order.item} className="order-image" />
-              <p>{order.item}</p>
-              <p>Quantity: {order.quantity}</p>
+              <img
+                src={`http://localhost:8070${farmerOrders[index].productImage}`}
+                alt={farmerOrders[index].item}
+                className="order-image"
+              />
+              <p>{farmerOrders[index].item}</p>
+              <p>Quantity: {farmerOrders[index].quantity}</p>
               <p>Pickup: Farmer</p>
               <p>Deliver To: Buyer</p>
               <button className="cart-button">

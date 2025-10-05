@@ -1,4 +1,4 @@
-// ==================== SERVER.JS ====================
+// server.js
 const express = require("express");
 const mongoose = require("mongoose");
 const cors = require("cors");
@@ -84,6 +84,23 @@ app.use("/deliverymenAuth", deliverymenAuthRouter);
 
 // -------------------- PRODUCT ROUTES --------------------
 const Product = require("./model/Product");
+
+// ✅ NEW: Get product by name
+app.get("/product/name/:productName", async (req, res) => {
+  try {
+    const productName = req.params.productName;
+    const product = await Product.findOne({ productName: productName });
+    
+    if (!product) {
+      return res.status(404).json({ message: "Product not found" });
+    }
+    
+    res.json(product);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
+  }
+});
 
 // Add new product
 app.post("/product/add", upload.single("productImage"), async (req, res) => {
