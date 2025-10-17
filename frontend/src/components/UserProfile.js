@@ -18,7 +18,7 @@ function UserProfile() {
       .then((data) => {
         if (data.status === "ok") {
           setUser(data.data);
-          fetchOrders(data.data.userRole, data.data._id);
+          fetchOrders(data.data.role, data.data._id);
         } else {
           setError("Please login again.");
         }
@@ -42,6 +42,11 @@ function UserProfile() {
       .catch((err) => console.error("Failed to fetch orders:", err));
   };
 
+  const handleLogout = () => {
+    localStorage.removeItem("token"); // remove token
+    navigate("/"); // redirect to home page
+  };
+
   if (error) return <p>{error}</p>;
   if (!user) return <p>Loading user data...</p>;
 
@@ -60,7 +65,7 @@ function UserProfile() {
           flex-direction: column;
           align-items: center;
           justify-content: flex-start;
-          padding: 80px 20px 40px 20px; /* pushed down from top */
+          padding: 80px 20px 40px 20px;
           min-height: 100vh;
           color: #2e5230;
           box-sizing: border-box;
@@ -70,14 +75,6 @@ function UserProfile() {
           font-size: 36px;
           font-weight: 700;
           margin-bottom: 10px;
-        }
-
-        h3 {
-          font-size: 28px;
-          font-weight: 600;
-          margin: 20px 0;
-          color: #3b6e3b;
-          text-align: center;
         }
 
         p {
@@ -95,12 +92,9 @@ function UserProfile() {
           width: 80%;
         }
 
-        /* Back Button (bottom-right) */
-        .back-button {
-          position: fixed;
-          bottom: 30px;
-          right: 30px;
-          padding: 15px 25px;
+        .button {
+          padding: 12px 25px;
+          margin: 10px;
           background-color: #3b6e3b;
           color: white;
           font-weight: 600;
@@ -111,12 +105,11 @@ function UserProfile() {
           box-shadow: 0 4px 10px rgba(0,0,0,0.2);
         }
 
-        .back-button:hover {
+        .button:hover {
           background-color: #2e5230;
-          transform: scale(1.1);
+          transform: scale(1.05);
         }
 
-        /* Orders Grid */
         .orders-wrapper {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
@@ -148,7 +141,6 @@ function UserProfile() {
           overflow-x: auto;
         }
 
-        /* Profile Card */
         .profile-card {
           background-color: #d9f0d9;
           border-radius: 15px;
@@ -173,14 +165,17 @@ function UserProfile() {
 
       <div className="container">
         <div className="profile-card">
-          <h2>Welcome, {user.fname}</h2>
+          <h2>Welcome, {user.username}</h2>
           <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>Role:</strong> {user.userRole}</p>
+          <p><strong>Salary:</strong> ${user.salary || 0}</p>
+          <button className="button" onClick={handleLogout}>
+            Logout
+          </button>
         </div>
 
         <hr />
 
-        <h3>Your {user.userRole} Orders:</h3>
+        <h3>Your Orders:</h3>
         {orders.length === 0 ? (
           <p>No orders found.</p>
         ) : (
@@ -193,10 +188,6 @@ function UserProfile() {
           </div>
         )}
       </div>
-
-      <button className="back-button" onClick={() => navigate("/regseller")}>
-        ← Back
-      </button>
     </>
   );
 }

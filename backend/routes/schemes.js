@@ -1,6 +1,9 @@
 const express = require("express");
 const router = express.Router();
+const mongoose = require("mongoose");
 const Scheme = require("../model/Scheme");
+const AppliedScheme = require("../model/AppliedScheme");
+const Farmer = require("../model/Farmer");
 
 // Get all schemes
 router.get("/", async (req, res) => {
@@ -8,58 +11,81 @@ router.get("/", async (req, res) => {
     const schemes = await Scheme.find();
     res.json(schemes);
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 
-// Add a new scheme
+// Add new scheme
 router.post("/", async (req, res) => {
   try {
-    const { name } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: "Scheme name is required" });
-    }
-
-    const newScheme = new Scheme({ name });
-    await newScheme.save();
-    res.json(newScheme);
+    const scheme = new Scheme({ name: req.body.name });
+    await scheme.save();
+    res.json(scheme);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Failed to add scheme" });
   }
 });
 
-// Update a scheme
+// Update scheme
 router.put("/:id", async (req, res) => {
-  try {
-    const { name } = req.body;
-    if (!name) {
-      return res.status(400).json({ error: "Scheme name is required" });
-    }
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id))
+    return res.status(400).json({ error: "Invalid scheme ID" });
 
-    const updated = await Scheme.findByIdAndUpdate(
-      req.params.id,
-      { name },
+  try {
+    const updatedScheme = await Scheme.findByIdAndUpdate(
+      id,
+      { name: req.body.name },
       { new: true }
     );
-    if (!updated) {
-      return res.status(404).json({ error: "Scheme not found" });
-    }
-    res.json(updated);
+    res.json(updatedScheme);
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Failed to update scheme" });
   }
 });
 
-// Delete a scheme
+// Delete scheme
 router.delete("/:id", async (req, res) => {
+  const { id } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(id))
+    return res.status(400).json({ error: "Invalid scheme ID" });
+
   try {
-    const deleted = await Scheme.findByIdAndDelete(req.params.id);
-    if (!deleted) {
-      return res.status(404).json({ error: "Scheme not found" });
-    }
-    res.json({ message: "Deleted successfully" });
+    await Scheme.findByIdAndDelete(id);
+    res.json({ message: "Scheme deleted successfully" });
   } catch (err) {
-    res.status(500).json({ error: err.message });
+    console.error(err);
+    res.status(500).json({ error: "Failed to delete scheme" });
+  }
+});
+
+// GET applicants for a scheme (only farmers)
+router.get("/:id/applicants", async (req, res) => {
+  const { id: schemeId } = req.params;
+  if (!mongoose.Types.ObjectId.isValid(schemeId))
+    return res.status(400).json({ error: "Invalid scheme ID" });
+
+  try {
+    const appliedSchemes = await AppliedScheme.find({ schemeId });
+
+    const result = await Promise.all(
+      appliedSchemes.map(async (app) => {
+        const farmer = await Farmer.findById(app.userId);
+        if (!farmer) return null;
+        return {
+          username: `${farmer.fname} ${farmer.lname}`, // display full name
+          role: farmer.role || "farmer",
+        };
+      })
+    );
+
+    res.json(result.filter((f) => f !== null));
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Server error" });
   }
 });
 

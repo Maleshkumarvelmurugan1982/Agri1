@@ -24,6 +24,10 @@ function GovernmentPage() {
   const [showDeliveryMen, setShowDeliveryMen] = useState(false);
   const [salaryInputs, setSalaryInputs] = useState({});
 
+  // Applicants states
+  const [applicants, setApplicants] = useState([]);
+  const [showApplicantsFor, setShowApplicantsFor] = useState(null);
+
   // Fetch schemes on mount but only if logged in
   useEffect(() => {
     if (loggedIn) {
@@ -121,7 +125,7 @@ function GovernmentPage() {
       return;
     }
 
-    const numericSalary = Number(salaryInputs[id]); // ✅ Convert to number
+    const numericSalary = Number(salaryInputs[id]);
 
     if (isNaN(numericSalary)) {
       alert("Salary must be a valid number");
@@ -130,13 +134,25 @@ function GovernmentPage() {
 
     try {
       await axios.put(`http://localhost:8070/deliverymen/${id}/salary`, {
-        salary: numericSalary, // ✅ send as number
+        salary: numericSalary,
       });
       alert("Salary updated successfully!");
       fetchDeliveryMen();
     } catch (err) {
       console.error("Failed to update salary:", err);
       alert("Failed to update salary. Please try again.");
+    }
+  };
+
+  // Fetch applicants for a scheme
+  const fetchApplicants = async (schemeId) => {
+    try {
+      const res = await axios.get(`http://localhost:8070/schemes/${schemeId}/applicants`);
+      setApplicants(res.data);
+      setShowApplicantsFor(schemeId);
+    } catch (err) {
+      console.error("Failed to fetch applicants:", err);
+      alert("Failed to fetch applicants. Please try again.");
     }
   };
 
@@ -160,6 +176,8 @@ function GovernmentPage() {
     setDeliveryMen([]);
     setShowDeliveryMen(false);
     setSalaryInputs({});
+    setApplicants([]);
+    setShowApplicantsFor(null);
   };
 
   return (
@@ -271,6 +289,7 @@ function GovernmentPage() {
               <tr>
                 <th>Scheme Name</th>
                 <th>Actions</th>
+                <th>Applicants</th>
               </tr>
             </thead>
             <tbody>
@@ -321,17 +340,52 @@ function GovernmentPage() {
                       </>
                     )}
                   </td>
+                  <td>
+                    <button
+                      onClick={() => fetchApplicants(scheme._id)}
+                      style={{ padding: "5px 10px", cursor: "pointer" }}
+                    >
+                      View Applicants
+                    </button>
+                  </td>
                 </tr>
               ))}
               {schemes.length === 0 && (
                 <tr>
-                  <td colSpan="2" style={{ textAlign: "center" }}>
+                  <td colSpan="3" style={{ textAlign: "center" }}>
                     No schemes available.
                   </td>
                 </tr>
               )}
             </tbody>
           </table>
+
+          {/* Applicants section */}
+          {showApplicantsFor && (
+            <div className="applicants-section" style={{ marginTop: "20px" }}>
+              <h3>Applicants:</h3>
+              {applicants.length > 0 ? (
+                <table>
+                  <thead>
+                    <tr>
+                      <th>Username</th>
+                      <th>Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {applicants.map((app, idx) => (
+                      <tr key={idx}>
+                        <td>{app.username}</td>
+                        <td>{app.role}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <p>No applicants yet for this scheme.</p>
+              )}
+            </div>
+          )}
 
           <div style={{ marginTop: "30px", marginBottom: "20px" }}>
             <button

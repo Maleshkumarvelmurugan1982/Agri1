@@ -68,14 +68,32 @@
   margin-bottom: 10px;
 }
 
-.scheme-buttons {
-  margin-top: 15px;
+/* ===== Scheme Buttons ===== */
+.scheme-buttons-container {
   display: flex;
-  gap: 15px;
+  gap: 10px;
+  margin: 10px 0;
+}
+
+.view-schemes-btn,
+.applied-schemes-btn {
+  background-color: #4CAF50;
+  color: white;
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 16px;
+  cursor: pointer;
+  transition: 0.3s;
+}
+
+.view-schemes-btn:hover,
+.applied-schemes-btn:hover {
+  background-color: #2e7d32;
 }
 
 .apply-button {
-  background-color: #4caf50;
+  background-color: #ff9800;
   color: white;
   border: none;
   padding: 8px 14px;
@@ -85,7 +103,7 @@
 }
 
 .apply-button:hover {
-  background-color: #2e7d32;
+  background-color: #e68900;
 }
 
 .cancel-button {

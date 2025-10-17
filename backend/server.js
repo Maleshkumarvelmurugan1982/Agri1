@@ -67,6 +67,11 @@ const schemesRouter = require("./routes/schemes");
 const userRouter = require("./routes/user");
 const deliverymenRouter = require("./routes/DeliveryMen");
 const authRouter = require("./routes/auth");
+const appliedSchemesRoutes = require("./routes/appliedSchemes");
+
+app.use("/appliedschemes", appliedSchemesRoutes);
+
+
 
 app.use("/farmer", farmerRouter);
 app.use("/seller", sellerRouter);

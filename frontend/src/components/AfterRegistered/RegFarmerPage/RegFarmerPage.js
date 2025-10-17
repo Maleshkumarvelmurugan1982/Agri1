@@ -4,21 +4,49 @@ import NavbarRegistered from "../../NavbarRegistered/NavbarRegistered";
 import FooterNew from "../../Footer/FooterNew";
 import RegCategories from "../../AfterRegistered/RegCatoegories/RegCategories";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import {
-  faChevronRight,
-  faShoppingCart,
-  faTruck,
-  faShoppingBag,
-  faInfoCircle,
-} from "@fortawesome/free-solid-svg-icons";
+import { faChevronRight, faShoppingCart, faTruck, faShoppingBag, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
 function FarmerPage() {
+  const [farmerId, setFarmerId] = useState("");
   const [sellerOrders, setSellerOrders] = useState([]);
   const [farmerOrders, setFarmerOrders] = useState([]);
   const [deliveryPosts, setDeliveryPosts] = useState([]);
   const [schemes, setSchemes] = useState([]);
+  const [appliedSchemes, setAppliedSchemes] = useState([]);
+  const [showSchemes, setShowSchemes] = useState(false);
+  const [showAppliedSchemes, setShowAppliedSchemes] = useState(false);
 
+  // Fetch farmer data using JWT token from localStorage
+  useEffect(() => {
+    const fetchFarmerData = async () => {
+      try {
+        const token = localStorage.getItem("token"); // token saved during login
+        if (!token) return;
+
+        const res = await fetch("http://localhost:8070/farmer/userdata", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+        const data = await res.json();
+        if (data.status === "ok") {
+          setFarmerId(data.data._id);
+
+          // Fetch applied schemes for this farmer
+          const appliedRes = await fetch(`http://localhost:8070/appliedschemes/${data.data._id}`);
+          const appliedData = await appliedRes.json();
+          setAppliedSchemes(appliedData);
+        }
+      } catch (err) {
+        console.error("Error fetching farmer data:", err);
+      }
+    };
+
+    fetchFarmerData();
+  }, []);
+
+  // Fetch other data: seller orders, farmer orders, delivery posts, schemes
   useEffect(() => {
     const fetchSellerOrders = async () => {
       try {
@@ -66,6 +94,27 @@ function FarmerPage() {
     fetchSchemes();
   }, []);
 
+  // Apply for a scheme
+  const handleApplyScheme = async (scheme) => {
+    if (!appliedSchemes.find((s) => s._id === scheme._id) && farmerId) {
+      try {
+        const response = await fetch("http://localhost:8070/appliedschemes/", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ userId: farmerId, schemeId: scheme._id }),
+        });
+        if (response.ok) {
+          setAppliedSchemes([...appliedSchemes, scheme]);
+          alert(`You applied for "${scheme.name}"!`);
+        } else {
+          alert("Failed to apply scheme");
+        }
+      } catch (error) {
+        console.error("Error applying scheme:", error);
+      }
+    }
+  };
+
   return (
     <div>
       <NavbarRegistered />
@@ -98,25 +147,61 @@ function FarmerPage() {
         </div>
       </div>
 
-      {/* Schemes */}
+      {/* Schemes Buttons */}
       <div className="topic">
         <p>Government Schemes</p>
+        <div className="scheme-buttons-container">
+          <button
+            className="view-schemes-btn"
+            onClick={() => {
+              setShowSchemes(!showSchemes);
+              setShowAppliedSchemes(false);
+            }}
+          >
+            View Schemes
+          </button>
+          <button
+            className="applied-schemes-btn"
+            onClick={() => {
+              setShowAppliedSchemes(!showAppliedSchemes);
+              setShowSchemes(false);
+            }}
+          >
+            Applied Schemes
+          </button>
+        </div>
       </div>
-      <div className="schemes-wrapper">
-        {schemes.length > 0 ? (
-          schemes.map((scheme) => (
-            <div key={scheme._id} className="scheme-item">
-              <p className="scheme-title">{scheme.name}</p>
-              <div className="scheme-buttons">
-                <button className="apply-button">Apply</button>
-                <button className="cancel-button">Cancel</button>
+
+      {/* Schemes List */}
+      {showSchemes && (
+        <div className="schemes-wrapper">
+          {schemes.length > 0 ? (
+            schemes.map((scheme) => (
+              <div key={scheme._id} className="scheme-item">
+                <p className="scheme-title">{scheme.name}</p>
+                <button className="apply-button" onClick={() => handleApplyScheme(scheme)}>Apply</button>
               </div>
-            </div>
-          ))
-        ) : (
-          <p>No schemes available right now.</p>
-        )}
-      </div>
+            ))
+          ) : (
+            <p>No schemes available right now.</p>
+          )}
+        </div>
+      )}
+
+      {/* Applied Schemes List */}
+      {showAppliedSchemes && (
+        <div className="schemes-wrapper">
+          {appliedSchemes.length > 0 ? (
+            appliedSchemes.map((scheme) => (
+              <div key={scheme._id} className="scheme-item">
+                <p className="scheme-title">{scheme.name}</p>
+              </div>
+            ))
+          ) : (
+            <p>You haven't applied for any schemes yet.</p>
+          )}
+        </div>
+      )}
 
       {/* Seller Orders */}
       <div className="topic">
@@ -126,11 +211,7 @@ function FarmerPage() {
         <div className="orders-container">
           {sellerOrders.slice(0, 4).map((order, index) => (
             <div key={index} className="order-item1">
-              <img
-                src={order.productImage}
-                alt={order.item}
-                className="order-image"
-              />
+              <img src={order.productImage} alt={order.item} className="order-image" />
               <p>{order.item}</p>
               <p>Quantity: {order.quantity}</p>
               <p>Price: Rs.{order.price}</p>
@@ -160,11 +241,7 @@ function FarmerPage() {
         <div className="orders-container">
           {farmerOrders.slice(0, 4).map((order, index) => (
             <div key={index} className="order-item">
-              <img
-                src={order.productImage}
-                alt={order.item}
-                className="order-image"
-              />
+              <img src={order.productImage} alt={order.item} className="order-image" />
               <p>{order.item}</p>
               <p>Quantity: {order.quantity}</p>
               <p>Price: Rs.{order.price}</p>
@@ -194,11 +271,7 @@ function FarmerPage() {
         <div className="orders-container">
           {deliveryPosts.slice(0, 4).map((order, index) => (
             <div key={index} className="order-item">
-              <img
-                src={order.vehicleImage}
-                alt={order.model}
-                className="order-image"
-              />
+              <img src={order.vehicleImage} alt={order.model} className="order-image" />
               <p>{order.model}</p>
               <p>Capacity: {order.capacity} kg</p>
               <p>Price: Rs.{order.price}/km</p>
