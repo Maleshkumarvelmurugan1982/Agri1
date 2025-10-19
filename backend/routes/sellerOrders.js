@@ -1,130 +1,145 @@
+
 const router = require("express").Router();
 const SellerOrder = require("../model/SellerOrder");
+const Product = require("../model/Product");
 
-//http://localhost:8070/sellerorders/add
-router.route("/add").post((req, res) => {
-  const name = req.body.name;
-  const item = req.body.item;
-  const productImage = req.body.productImage;
-  const category = req.body.category;
-  const quantity = req.body.quantity;
-  const price = req.body.price;
-  const district = req.body.district;
-  const company = req.body.company;
-  const mobile = req.body.mobile;
-  const land = req.body.land;
-  const email = req.body.email;
-  const address = req.body.address;
-  const expireDate = req.body.expireDate;
-
-  const newSellerOrder = new SellerOrder({
-    name,
-    item,
-    productImage,
-    category,
-    quantity,
-    price,
-    district,
-    company,
-    mobile,
-    land,
-    email,
-    address,
-    expireDate,
-  });
-
-  newSellerOrder
-    .save()
-    .then(() => {
-      res.json("New Seller Order added succesfully!");
-    })
-    .catch((error) => {
-      console.log(error);
-    });
-});
-
-//http://localhost:8070/sellerorder/
-router.route("/").get((req, res) => {
+// Get all seller orders
+router.get("/", (req, res) => {
   SellerOrder.find()
-    .then((sellerorders) => {
-      res.json(sellerorders);
-    })
-    .catch((error) => {
-      console.log(error);
-    });
+    .then(orders => res.json(orders))
+    .catch(err => res.status(500).send({ status: "Error fetching seller orders" }));
 });
 
-//http://localhost:8070/sellerorder/update/id
-router.route("/update/:id").put(async (req, res) => {
-  let sellerOrderID = req.params.id;
+// Add new seller order
+router.post("/add", (req, res) => {
   const {
-    name,
-    item,
-    productImage,
-    category,
-    quantity,
-    price,
-    district,
-    company,
-    mobile,
-    land,
-    email,
-    address,
-    expireDate,
+    name, item, productImage, category, quantity, price,
+    district, company, mobile, land, email, address, postedDate, expireDate
   } = req.body;
-  const updateSellerOrder = {
-    name,
-    item,
-    productImage,
-    category,
-    quantity,
+  
+  const newOrder = new SellerOrder({
+    name: name || "", // Optional field
+    item, 
+    productImage, 
+    category, 
+    quantity, 
     price,
-    district,
-    company,
-    mobile,
-    land,
-    email,
-    address,
+    district, 
+    company, 
+    mobile, 
+    land, 
+    email, 
+    address, 
+    postedDate: postedDate || new Date().toISOString().split('T')[0],
     expireDate,
-  };
-
-  await SellerOrder.findByIdAndUpdate(sellerOrderID, updateSellerOrder)
-    .then(() => {
-      res.status(200).send({ status: "seller updated" });
+    status: "pending",
+    deliverymanId: null
+  });
+  
+  newOrder.save()
+    .then((savedOrder) => {
+      console.log("✅ Order created:", savedOrder);
+      res.json({ 
+        message: "New Seller Order added successfully!",
+        order: savedOrder
+      });
     })
-    .catch((error) => {
-      console.log(error);
-      res.status(500).send({ status: "Error with updating data" });
+    .catch(err => {
+      console.error("❌ Error adding order:", err);
+      res.status(500).send({ 
+        status: "Error adding seller order",
+        error: err.message 
+      });
     });
 });
 
-//done by either seller or admin
-//http://localhost:8070/sellerorder/delete/id
-router.route("/delete/:id").delete(async (req, res) => {
-  let sellerOrderID = req.params.id;
-
-  await SellerOrder.findByIdAndDelete(sellerOrderID)
-    .then(() => {
-      res.status(200).send({ status: "seller deleted" });
-    })
-    .catch((error) => {
-      console.log(error);
-      res.status(500).send({ status: "Error with updating data" });
+// ✅ UPDATE: Approve / Disapprove Seller Order & Reduce Product Quantity if approved
+router.put("/update/:id", async (req, res) => {
+  const orderId = req.params.id;
+  const { status } = req.body; // "approved" or "disapproved"
+  
+  console.log(`📝 Update request for order ${orderId} with status: ${status}`);
+  
+  try {
+    const order = await SellerOrder.findById(orderId);
+    if (!order) {
+      console.log("❌ Order not found:", orderId);
+      return res.status(404).json({ status: "Order not found" });
+    }
+    
+    console.log("✅ Order found:", order);
+    
+    // If approved, reduce product quantity
+    if (status === "approved") {
+      // Try to find product by productName field
+      let product = await Product.findOne({ productName: order.item });
+      
+      // If not found, try by name field (fallback)
+      if (!product) {
+        product = await Product.findOne({ name: order.item });
+      }
+      
+      console.log("🔍 Product lookup for:", order.item);
+      
+      if (!product) {
+        console.log("❌ Product not found:", order.item);
+        return res.status(404).json({ status: "Product not found" });
+      }
+      
+      console.log("✅ Product found:", product);
+      
+      if (product.quantity < order.quantity) {
+        console.log("❌ Insufficient quantity");
+        return res.status(400).json({ status: "Not enough product quantity" });
+      }
+      
+      product.quantity -= order.quantity;
+      await product.save();
+      console.log(`✅ Product quantity updated: ${product.productName || product.name} - ${order.quantity} kg`);
+    }
+    
+    // Update only the status field
+    const updatedOrder = await SellerOrder.findByIdAndUpdate(
+      orderId,
+      { status },
+      { new: true, runValidators: false }
+    );
+    
+    console.log("✅ Order status updated:", updatedOrder);
+    
+    res.status(200).json({ 
+      message: `Order ${status}`,
+      order: updatedOrder 
     });
+  } catch (err) {
+    console.error("❌ Error updating seller order:", err);
+    res.status(500).send({ 
+      status: "Error updating seller order",
+      error: err.message 
+    });
+  }
 });
 
-//done by admin
-//http://localhost:8070/sellerorder/get/id
-router.route("/get/:id").get(async (req, res) => {
-  let sellerOrderID = req.params.id;
-  await SellerOrder.findById(sellerOrderID)
-    .then((sellerOrder) => {
-      res.status(200).send({ status: "user fetched", sellerOrder });
-    })
-    .catch((error) => {
-      console.log(error);
-      res.status(500).send({ status: "error with ferching student" });
+// Delete order (optional)
+router.delete("/:id", async (req, res) => {
+  try {
+    const deletedOrder = await SellerOrder.findByIdAndDelete(req.params.id);
+    
+    if (!deletedOrder) {
+      return res.status(404).json({ message: "Order not found" });
+    }
+
+    res.json({ 
+      message: "Order deleted successfully",
+      order: deletedOrder
     });
+  } catch (err) {
+    console.error("❌ Error deleting order:", err);
+    res.status(500).json({ 
+      message: "Error deleting order",
+      error: err.message 
+    });
+  }
 });
 
 module.exports = router;

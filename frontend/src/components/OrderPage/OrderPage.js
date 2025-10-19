@@ -25,6 +25,8 @@ function OrderPage() {
   const [productId, setProductId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const BASE_URL = "http://localhost:8070";
+
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     
@@ -41,7 +43,7 @@ function OrderPage() {
     console.log("Product name from URL:", productNameFromUrl);
     
     if (productNameFromUrl) {
-      fetch(`http://localhost:8070/product/name/${productNameFromUrl}`)
+      fetch(`${BASE_URL}/product/name/${productNameFromUrl}`)
         .then((response) => {
           if (!response.ok) {
             throw new Error("Product not found");
@@ -109,28 +111,28 @@ function OrderPage() {
     setIsSubmitting(true);
 
     try {
-      // Create the order
+      // Create the order - matching your schema
       const orderData = {
-        productId: productId,
-        productName: formData.productName,
+        name: formData.company, // Using company as name
+        item: formData.productName,
         productImage: formData.productImage,
+        category: "vegetable", // Default category
         quantity: Number(formData.quantity),
-        unitPrice: unitPrice,
-        totalPrice: Number(formData.price),
+        price: Number(formData.price),
         district: formData.district,
         company: formData.company,
         mobile: formData.mobile,
         email: formData.email,
         address: formData.address,
+        postedDate: new Date().toISOString().split('T')[0],
         expireDate: formData.expireDate,
-        orderDate: new Date().toISOString(),
-        status: "Pending"
+        status: "pending"
       };
 
       console.log("Submitting order:", orderData);
 
       // Submit order to backend
-      const orderResponse = await fetch("http://localhost:8070/sellerorder/add", {
+      const orderResponse = await fetch(`${BASE_URL}/sellerorder/add`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -138,38 +140,23 @@ function OrderPage() {
         body: JSON.stringify(orderData),
       });
 
-      if (!orderResponse.ok) {
-        throw new Error("Failed to create order");
-      }
-
       const orderResult = await orderResponse.json();
-      console.log("Order created:", orderResult);
+      console.log("Order response:", orderResult);
 
-      // Update product quantity in database
-      const newQuantity = availableQuantity - Number(formData.quantity);
-      const updateResponse = await fetch(`http://localhost:8070/product/${productId}`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          quantity: newQuantity,
-          price: unitPrice
-        }),
-      });
-
-      if (!updateResponse.ok) {
-        throw new Error("Failed to update product quantity");
+      if (!orderResponse.ok) {
+        throw new Error(orderResult.message || "Failed to create order");
       }
 
-      alert("Order placed successfully!");
+      console.log("Order created successfully:", orderResult);
+
+      alert("Order placed successfully! Waiting for farmer approval.");
       
-      // Reset form or navigate to orders page
-      navigate("/orders");
+      // Navigate to seller page or orders page
+      navigate("/regseller");
       
     } catch (error) {
       console.error("Error submitting order:", error);
-      alert("Failed to place order. Please try again.");
+      alert(`Failed to place order: ${error.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -177,13 +164,17 @@ function OrderPage() {
 
   return (
     <div className="form-container">
-      <h3>Place new Order</h3>
+      <h3>Place New Order</h3>
       <form onSubmit={handleSubmit}>
         {formData.productImage && (
           <div className="image-preview">
             <img 
-              src={`http://localhost:8070${formData.productImage}`} 
-              alt="Product" 
+              src={`${BASE_URL}${formData.productImage}`} 
+              alt="Product"
+              onError={(e) => {
+                e.target.onerror = null;
+                e.target.src = 'https://via.placeholder.com/200?text=No+Image';
+              }}
             />
           </div>
         )}
@@ -230,7 +221,7 @@ function OrderPage() {
           placeholder="Enter Quantity"
           value={formData.quantity}
           onChange={handleChange}
-          min="0"
+          min="0.1"
           step="0.1"
           max={availableQuantity}
           className={quantityError ? "input-error" : ""}
@@ -312,6 +303,7 @@ function OrderPage() {
           placeholder="Address"
           value={formData.address}
           onChange={handleChange}
+          rows="3"
           required
         ></textarea>
 

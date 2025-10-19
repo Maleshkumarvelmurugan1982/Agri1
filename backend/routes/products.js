@@ -14,6 +14,17 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
+// ✅ GET all products
+router.get("/", async (req, res) => {
+  try {
+    const products = await Product.find();
+    res.json(products);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
 // GET products by category
 router.get("/category/:category", async (req, res) => {
   try {
@@ -31,7 +42,6 @@ router.post("/add", upload.single("productImage"), async (req, res) => {
   try {
     const { productName, category, quantity, price } = req.body;
     
-    // ✅ FIX: Build proper path with forward slashes
     let productImage = "";
     if (req.file) {
       productImage = `/uploads/${req.file.filename}`;

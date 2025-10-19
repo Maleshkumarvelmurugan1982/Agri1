@@ -4,7 +4,7 @@ import NavbarRegistered from "../../NavbarRegistered/NavbarRegistered";
 import FooterNew from "../../Footer/FooterNew";
 import RegCategories from "../../AfterRegistered/RegCatoegories/RegCategories";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronRight, faShoppingCart, faTruck, faShoppingBag, faInfoCircle } from "@fortawesome/free-solid-svg-icons";
+import { faChevronRight, faShoppingCart, faTruck, faShoppingBag, faInfoCircle, faThumbsUp, faThumbsDown } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
 function FarmerPage() {
@@ -17,14 +17,23 @@ function FarmerPage() {
   const [showSchemes, setShowSchemes] = useState(false);
   const [showAppliedSchemes, setShowAppliedSchemes] = useState(false);
 
-  // Fetch farmer data using JWT token from localStorage
+  const BASE_URL = "http://localhost:8070";
+
+  // Helper function to get full image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) return 'https://via.placeholder.com/150?text=No+Image';
+    if (imagePath.startsWith('http')) return imagePath;
+    return `${BASE_URL}${imagePath}`;
+  };
+
+  // Fetch farmer data
   useEffect(() => {
     const fetchFarmerData = async () => {
       try {
-        const token = localStorage.getItem("token"); // token saved during login
+        const token = localStorage.getItem("token");
         if (!token) return;
 
-        const res = await fetch("http://localhost:8070/farmer/userdata", {
+        const res = await fetch(`${BASE_URL}/farmer/userdata`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token }),
@@ -33,8 +42,7 @@ function FarmerPage() {
         if (data.status === "ok") {
           setFarmerId(data.data._id);
 
-          // Fetch applied schemes for this farmer
-          const appliedRes = await fetch(`http://localhost:8070/appliedschemes/${data.data._id}`);
+          const appliedRes = await fetch(`${BASE_URL}/appliedschemes/${data.data._id}`);
           const appliedData = await appliedRes.json();
           setAppliedSchemes(appliedData);
         }
@@ -42,15 +50,14 @@ function FarmerPage() {
         console.error("Error fetching farmer data:", err);
       }
     };
-
     fetchFarmerData();
   }, []);
 
-  // Fetch other data: seller orders, farmer orders, delivery posts, schemes
+  // Fetch other data
   useEffect(() => {
     const fetchSellerOrders = async () => {
       try {
-        const response = await fetch("http://localhost:8070/sellerorder/");
+        const response = await fetch(`${BASE_URL}/sellerorder/`);
         const data = await response.json();
         setSellerOrders(data);
       } catch (error) {
@@ -60,7 +67,7 @@ function FarmerPage() {
 
     const fetchFarmerOrders = async () => {
       try {
-        const response = await fetch("http://localhost:8070/farmerorder/");
+        const response = await fetch(`${BASE_URL}/farmerorder/`);
         const data = await response.json();
         setFarmerOrders(data);
       } catch (error) {
@@ -70,7 +77,7 @@ function FarmerPage() {
 
     const fetchDeliveryPosts = async () => {
       try {
-        const response = await fetch("http://localhost:8070/deliverypost/");
+        const response = await fetch(`${BASE_URL}/deliverypost/`);
         const data = await response.json();
         setDeliveryPosts(data);
       } catch (error) {
@@ -80,7 +87,7 @@ function FarmerPage() {
 
     const fetchSchemes = async () => {
       try {
-        const response = await fetch("http://localhost:8070/schemes/");
+        const response = await fetch(`${BASE_URL}/schemes/`);
         const data = await response.json();
         setSchemes(data);
       } catch (error) {
@@ -94,11 +101,11 @@ function FarmerPage() {
     fetchSchemes();
   }, []);
 
-  // Apply for a scheme
+  // Apply for scheme
   const handleApplyScheme = async (scheme) => {
     if (!appliedSchemes.find((s) => s._id === scheme._id) && farmerId) {
       try {
-        const response = await fetch("http://localhost:8070/appliedschemes/", {
+        const response = await fetch(`${BASE_URL}/appliedschemes/`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ userId: farmerId, schemeId: scheme._id }),
@@ -112,6 +119,59 @@ function FarmerPage() {
       } catch (error) {
         console.error("Error applying scheme:", error);
       }
+    }
+  };
+
+  // Approve or Disapprove Seller Order
+  const handleOrderStatus = async (orderId, newStatus) => {
+    try {
+      // Find the order
+      const order = sellerOrders.find(o => o._id === orderId);
+      
+      if (!order) {
+        alert("Order not found");
+        return;
+      }
+
+      // Update order status (backend will handle quantity reduction)
+      const res = await fetch(`${BASE_URL}/sellerorder/update/${orderId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: newStatus }),
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        alert(errorData.status || "Failed to update order");
+        return;
+      }
+      
+      const data = await res.json();
+      
+      // Update sellerOrders in state
+      setSellerOrders((prev) =>
+        prev.map((o) =>
+          o._id === orderId ? { ...o, status: newStatus } : o
+        )
+      );
+      
+      alert(`Order ${newStatus} successfully!`);
+    } catch (err) {
+      console.error("Error updating order:", err);
+      alert("Error updating order. Please try again.");
+    }
+  };
+
+  // Function to get color based on status
+  const getStatusColor = (status) => {
+    switch (status?.toLowerCase()) {
+      case "approved":
+        return "green";
+      case "disapproved":
+        return "red";
+      case "pending":
+      default:
+        return "orange";
     }
   };
 
@@ -209,20 +269,39 @@ function FarmerPage() {
       </div>
       <div className="orders-wrapper">
         <div className="orders-container">
-          {sellerOrders.slice(0, 4).map((order, index) => (
-            <div key={index} className="order-item1">
-              <img src={order.productImage} alt={order.item} className="order-image" />
+          {sellerOrders.slice(0, 4).map((order) => (
+            <div key={order._id} className="order-item1">
+              <img 
+                src={getImageUrl(order.productImage)} 
+                alt={order.item} 
+                className="order-image"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                }}
+              />
               <p>{order.item}</p>
               <p>Quantity: {order.quantity}</p>
               <p>Price: Rs.{order.price}</p>
+              <p>District: {order.district}</p>
+              <p>Company: {order.company}</p>
+              <p>Mobile: {order.mobile}</p>
               <p>Posted Date: {order.postedDate}</p>
               <p>Expires Date: {order.expireDate}</p>
-              <button className="cart-button">
-                <FontAwesomeIcon icon={faShoppingCart} /> Add to Cart
-              </button>
-              <button className="supply-button">
-                <FontAwesomeIcon icon={faTruck} /> Supply
-              </button>
+              <p>
+                Status:{" "}
+                <b style={{ color: getStatusColor(order.status) }}>
+                  {order.status ? order.status.toUpperCase() : "PENDING"}
+                </b>
+              </p>
+              <div className="order-buttons">
+                <button className="approve-btn" onClick={() => handleOrderStatus(order._id, "approved")}>
+                  <FontAwesomeIcon icon={faThumbsUp} /> Approve
+                </button>
+                <button className="disapprove-btn" onClick={() => handleOrderStatus(order._id, "disapproved")}>
+                  <FontAwesomeIcon icon={faThumbsDown} /> Disapprove
+                </button>
+              </div>
             </div>
           ))}
         </div>
@@ -241,7 +320,15 @@ function FarmerPage() {
         <div className="orders-container">
           {farmerOrders.slice(0, 4).map((order, index) => (
             <div key={index} className="order-item">
-              <img src={order.productImage} alt={order.item} className="order-image" />
+              <img 
+                src={getImageUrl(order.productImage)} 
+                alt={order.item} 
+                className="order-image"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                }}
+              />
               <p>{order.item}</p>
               <p>Quantity: {order.quantity}</p>
               <p>Price: Rs.{order.price}</p>
@@ -271,7 +358,15 @@ function FarmerPage() {
         <div className="orders-container">
           {deliveryPosts.slice(0, 4).map((order, index) => (
             <div key={index} className="order-item">
-              <img src={order.vehicleImage} alt={order.model} className="order-image" />
+              <img 
+                src={getImageUrl(order.vehicleImage)} 
+                alt={order.model} 
+                className="order-image"
+                onError={(e) => {
+                  e.target.onerror = null;
+                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                }}
+              />
               <p>{order.model}</p>
               <p>Capacity: {order.capacity} kg</p>
               <p>Price: Rs.{order.price}/km</p>
