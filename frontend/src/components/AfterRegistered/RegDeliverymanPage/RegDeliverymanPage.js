@@ -25,13 +25,19 @@ function RegDeliverymanPage({ deliverymanId }) {
       try {
         setLoading(true);
 
-        // Fetch seller orders
+        // Fetch seller orders and filter only approved ones
         const sellerResponse = await axios.get("http://localhost:8070/sellerorder/");
-        setSellerOrders(sellerResponse.data ?? []);
+        const approvedSellerOrders = (sellerResponse.data ?? []).filter(
+          order => order.farmerApproved === true || order.status === "approved"
+        );
+        setSellerOrders(approvedSellerOrders);
 
-        // Fetch farmer orders
+        // Fetch farmer orders and filter only approved ones
         const farmerResponse = await axios.get("http://localhost:8070/farmerorder/");
-        setFarmerOrders(farmerResponse.data ?? []);
+        const approvedFarmerOrders = (farmerResponse.data ?? []).filter(
+          order => order.farmerApproved === true || order.status === "approved"
+        );
+        setFarmerOrders(approvedFarmerOrders);
 
         // Fetch salary from backend
         if (deliverymanId) {
@@ -109,35 +115,43 @@ function RegDeliverymanPage({ deliverymanId }) {
 
       {/* Seller Orders */}
       <div className="topic">
-        <p>Seller Orders to Deliver</p>
+        <p>Farmer Approved Seller Orders to Deliver</p>
       </div>
 
       <div className="orders-wrapper">
-        <div className="orders-container">
-          {sellerOrders.slice(0, 4).map((_, index) => (
-            <div key={index} className="order-item">
-              <img
-                src={`http://localhost:8070${sellerOrders[index].productImage}`}
-                alt={sellerOrders[index].item}
-                className="order-image"
-              />
-              <p>{sellerOrders[index].item}</p>
-              <p>Quantity: {sellerOrders[index].quantity}</p>
-              <p>Pickup: Seller</p>
-              <p>Deliver To: Buyer</p>
-              <button className="cart-button">
-                <FontAwesomeIcon icon={faTruck} /> Accept Delivery
-              </button>
-              <button className="supply-button">
-                <FontAwesomeIcon icon={faInfoCircle} /> More Info
-              </button>
+        {sellerOrders.length === 0 ? (
+          <p style={{ textAlign: "center", padding: "20px", color: "#666" }}>
+            No approved seller orders available for delivery at this time.
+          </p>
+        ) : (
+          <>
+            <div className="orders-container">
+              {sellerOrders.slice(0, 4).map((order, index) => (
+                <div key={index} className="order-item">
+                  <img
+                    src={`http://localhost:8070${order.productImage}`}
+                    alt={order.item}
+                    className="order-image"
+                  />
+                  <p>{order.item}</p>
+                  <p>Quantity: {order.quantity}</p>
+                  <p>Pickup: Seller</p>
+                  <p>Deliver To: Buyer</p>
+                  <button className="cart-button">
+                    <FontAwesomeIcon icon={faTruck} /> Accept Delivery
+                  </button>
+                  <button className="supply-button">
+                    <FontAwesomeIcon icon={faInfoCircle} /> More Info
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {sellerOrders.length > 4 && (
-          <a href="/sellerorder" className="view-all-button1">
-            <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-          </a>
+            {sellerOrders.length > 4 && (
+              <a href="/sellerorder" className="view-all-button1">
+                <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
+              </a>
+            )}
+          </>
         )}
       </div>
 
@@ -145,35 +159,43 @@ function RegDeliverymanPage({ deliverymanId }) {
 
       {/* Farmer Orders */}
       <div className="topic">
-        <p>Farmer Orders to Deliver</p>
+        <p>Farmer Approved Orders to Deliver</p>
       </div>
 
       <div className="orders-wrapper">
-        <div className="orders-container">
-          {farmerOrders.slice(0, 4).map((_, index) => (
-            <div key={index} className="order-item">
-              <img
-                src={`http://localhost:8070${farmerOrders[index].productImage}`}
-                alt={farmerOrders[index].item}
-                className="order-image"
-              />
-              <p>{farmerOrders[index].item}</p>
-              <p>Quantity: {farmerOrders[index].quantity}</p>
-              <p>Pickup: Farmer</p>
-              <p>Deliver To: Buyer</p>
-              <button className="cart-button">
-                <FontAwesomeIcon icon={faTruck} /> Accept Delivery
-              </button>
-              <button className="supply-button">
-                <FontAwesomeIcon icon={faInfoCircle} /> More Info
-              </button>
+        {farmerOrders.length === 0 ? (
+          <p style={{ textAlign: "center", padding: "20px", color: "#666" }}>
+            No approved farmer orders available for delivery at this time.
+          </p>
+        ) : (
+          <>
+            <div className="orders-container">
+              {farmerOrders.slice(0, 4).map((order, index) => (
+                <div key={index} className="order-item">
+                  <img
+                    src={`http://localhost:8070${order.productImage}`}
+                    alt={order.item}
+                    className="order-image"
+                  />
+                  <p>{order.item}</p>
+                  <p>Quantity: {order.quantity}</p>
+                  <p>Pickup: Farmer</p>
+                  <p>Deliver To: Buyer</p>
+                  <button className="cart-button">
+                    <FontAwesomeIcon icon={faTruck} /> Accept Delivery
+                  </button>
+                  <button className="supply-button">
+                    <FontAwesomeIcon icon={faInfoCircle} /> More Info
+                  </button>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        {farmerOrders.length > 4 && (
-          <a href="/farmerorder" className="view-all-button1">
-            <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-          </a>
+            {farmerOrders.length > 4 && (
+              <a href="/farmerorder" className="view-all-button1">
+                <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
+              </a>
+            )}
+          </>
         )}
       </div>
 
