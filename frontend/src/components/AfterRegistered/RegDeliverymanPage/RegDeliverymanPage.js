@@ -21,45 +21,114 @@ function RegDeliverymanPage({ deliverymanId }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    const fetchData = async () => {
+    const fetchOrders = async () => {
       try {
         setLoading(true);
 
-        // Fetch seller orders and filter only approved ones
+        // Fetch seller orders
         const sellerResponse = await axios.get("http://localhost:8070/sellerorder/");
-        const approvedSellerOrders = (sellerResponse.data ?? []).filter(
-          order => order.farmerApproved === true || order.status === "approved"
-        );
+        const approvedSellerOrders = (sellerResponse.data ?? [])
+          .filter(order => order.farmerApproved === true || order.status === "approved")
+          .map(order => ({
+            ...order,
+            acceptedByDeliveryman: order.acceptedByDeliveryman || false,
+          }));
         setSellerOrders(approvedSellerOrders);
 
-        // Fetch farmer orders and filter only approved ones
+        // Fetch farmer orders
         const farmerResponse = await axios.get("http://localhost:8070/farmerorder/");
-        const approvedFarmerOrders = (farmerResponse.data ?? []).filter(
-          order => order.farmerApproved === true || order.status === "approved"
-        );
+        const approvedFarmerOrders = (farmerResponse.data ?? [])
+          .filter(order => order.farmerApproved === true || order.status === "approved")
+          .map(order => ({
+            ...order,
+            acceptedByDeliveryman: order.acceptedByDeliveryman || false,
+          }));
         setFarmerOrders(approvedFarmerOrders);
 
-        // Fetch salary from backend
+        // Fetch salary
         if (deliverymanId) {
           const salaryResponse = await axios.get(`http://localhost:8070/salary/${deliverymanId}`);
           setSalary(salaryResponse.data.salary ?? 0);
         }
-      } catch (error) {
-        console.error("Error fetching data:", error);
-        setSalary(0);
+      } catch (err) {
+        console.error("Error fetching data:", err);
         setSellerOrders([]);
         setFarmerOrders([]);
+        setSalary(0);
       } finally {
         setLoading(false);
       }
     };
 
-    fetchData();
+    fetchOrders();
   }, [deliverymanId]);
+
+  // Handle deliveryman accepting order
+  const handleAcceptDelivery = async (orderId, type) => {
+    try {
+      // Optimistic frontend update
+      if (type === "seller") {
+        setSellerOrders(prev =>
+          prev.map(order =>
+            order._id === orderId ? { ...order, acceptedByDeliveryman: true } : order
+          )
+        );
+        // Persist in backend
+        await axios.put(`http://localhost:8070/sellerorder/${orderId}/accept`, { deliverymanId });
+      } else {
+        setFarmerOrders(prev =>
+          prev.map(order =>
+            order._id === orderId ? { ...order, acceptedByDeliveryman: true } : order
+          )
+        );
+        // Persist in backend
+        await axios.put(`http://localhost:8070/farmerorder/${orderId}/accept`, { deliverymanId });
+      }
+    } catch (err) {
+      console.error("Error accepting delivery:", err);
+    }
+  };
 
   if (loading) {
     return <p style={{ textAlign: "center", marginTop: "50px" }}>Loading...</p>;
   }
+
+  // Render orders
+  const renderOrders = (orders, type) => (
+    <>
+      <div className="orders-container">
+        {orders.slice(0, 4).map((order, index) => (
+          <div key={index} className="order-item">
+            <img
+              src={`http://localhost:8070${order.productImage}`}
+              alt={order.item}
+              className="order-image"
+            />
+            <p>{order.item}</p>
+            <p>Quantity: {order.quantity}</p>
+            <p>Pickup: {type === "seller" ? "Seller" : "Farmer"}</p>
+            <p>Deliver To: Buyer</p>
+            <button
+              className="cart-button"
+              onClick={() => handleAcceptDelivery(order._id, type)}
+              disabled={order.acceptedByDeliveryman}
+            >
+              <FontAwesomeIcon icon={faTruck} />{" "}
+              {order.acceptedByDeliveryman ? "You Approved Delivery" : "Accept Delivery"}
+            </button>
+            <button className="supply-button">
+              <FontAwesomeIcon icon={faInfoCircle} /> More Info
+            </button>
+          </div>
+        ))}
+      </div>
+      {orders.length > 4 && (
+        <a href={`/${type}order`} className="view-all-button1">
+          <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
+        </a>
+      )}
+    </>
+  );
 
   return (
     <div>
@@ -79,10 +148,7 @@ function RegDeliverymanPage({ deliverymanId }) {
           text="Welcome Delivery Partners!"
           loop={false}
           className="writer"
-          textStyle={{
-            fontFamily: "Gill Sans",
-            fontSize: "60px",
-          }}
+          textStyle={{ fontFamily: "Gill Sans", fontSize: "60px" }}
         />
       </div>
 
@@ -92,7 +158,7 @@ function RegDeliverymanPage({ deliverymanId }) {
         </div>
       </div>
 
-      {/* Display current salary */}
+      {/* Salary Section */}
       <div className="salary-section" style={{ margin: "20px", textAlign: "center" }}>
         <button className="view-salary-button" onClick={() => setShowSalary(true)}>
           <FontAwesomeIcon icon={faMoneyBillWave} /> Your Salary Provided by Government
@@ -117,43 +183,7 @@ function RegDeliverymanPage({ deliverymanId }) {
       <div className="topic">
         <p>Farmer Approved Seller Orders to Deliver</p>
       </div>
-
-      <div className="orders-wrapper">
-        {sellerOrders.length === 0 ? (
-          <p style={{ textAlign: "center", padding: "20px", color: "#666" }}>
-            No approved seller orders available for delivery at this time.
-          </p>
-        ) : (
-          <>
-            <div className="orders-container">
-              {sellerOrders.slice(0, 4).map((order, index) => (
-                <div key={index} className="order-item">
-                  <img
-                    src={`http://localhost:8070${order.productImage}`}
-                    alt={order.item}
-                    className="order-image"
-                  />
-                  <p>{order.item}</p>
-                  <p>Quantity: {order.quantity}</p>
-                  <p>Pickup: Seller</p>
-                  <p>Deliver To: Buyer</p>
-                  <button className="cart-button">
-                    <FontAwesomeIcon icon={faTruck} /> Accept Delivery
-                  </button>
-                  <button className="supply-button">
-                    <FontAwesomeIcon icon={faInfoCircle} /> More Info
-                  </button>
-                </div>
-              ))}
-            </div>
-            {sellerOrders.length > 4 && (
-              <a href="/sellerorder" className="view-all-button1">
-                <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-              </a>
-            )}
-          </>
-        )}
-      </div>
+      <div className="orders-wrapper">{renderOrders(sellerOrders, "seller")}</div>
 
       <div className="nothing2"></div>
 
@@ -161,43 +191,7 @@ function RegDeliverymanPage({ deliverymanId }) {
       <div className="topic">
         <p>Farmer Approved Orders to Deliver</p>
       </div>
-
-      <div className="orders-wrapper">
-        {farmerOrders.length === 0 ? (
-          <p style={{ textAlign: "center", padding: "20px", color: "#666" }}>
-            No approved farmer orders available for delivery at this time.
-          </p>
-        ) : (
-          <>
-            <div className="orders-container">
-              {farmerOrders.slice(0, 4).map((order, index) => (
-                <div key={index} className="order-item">
-                  <img
-                    src={`http://localhost:8070${order.productImage}`}
-                    alt={order.item}
-                    className="order-image"
-                  />
-                  <p>{order.item}</p>
-                  <p>Quantity: {order.quantity}</p>
-                  <p>Pickup: Farmer</p>
-                  <p>Deliver To: Buyer</p>
-                  <button className="cart-button">
-                    <FontAwesomeIcon icon={faTruck} /> Accept Delivery
-                  </button>
-                  <button className="supply-button">
-                    <FontAwesomeIcon icon={faInfoCircle} /> More Info
-                  </button>
-                </div>
-              ))}
-            </div>
-            {farmerOrders.length > 4 && (
-              <a href="/farmerorder" className="view-all-button1">
-                <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-              </a>
-            )}
-          </>
-        )}
-      </div>
+      <div className="orders-wrapper">{renderOrders(farmerOrders, "farmer")}</div>
 
       <FooterNew />
     </div>

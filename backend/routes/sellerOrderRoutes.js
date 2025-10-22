@@ -1,50 +1,30 @@
-const router = require("express").Router();
-const SellerOrder = require("../model/SellerOrder");
+const express = require("express");
+const router = express.Router();
+const SellerOrder = require("../model/SellerOrder"); // Your Mongoose model
 
-// Add new seller order
-router.post("/add", (req, res) => {
-  const {
-    name, item, productImage, category, quantity, price,
-    district, company, mobile, land, email, address, expireDate
-  } = req.body;
-
-  const newOrder = new SellerOrder({
-    name, item, productImage, category, quantity, price,
-    district, company, mobile, land, email, address, expireDate,
-    status: "Pending",
-    deliverymanId: null
-  });
-
-  newOrder.save()
-    .then(() => res.json("New Seller Order added successfully!"))
-    .catch(err => {
-      console.log(err);
-      res.status(500).send({ status: "Error adding seller order" });
-    });
-});
-
-// Get all seller orders
-router.get("/", (req, res) => {
-  SellerOrder.find()
-    .then(orders => res.json(orders))
-    .catch(err => res.status(500).send({ status: "Error fetching seller orders" }));
-});
-
-// Accept Delivery / Update order
-router.put("/update/:id", async (req, res) => {
-  const orderId = req.params.id;
-  const { status, deliverymanId } = req.body;
-
+// GET all seller orders
+router.get("/", async (req, res) => {
   try {
-    const updatedOrder = await SellerOrder.findByIdAndUpdate(
-      orderId,
-      { status, deliverymanId },
-      { new: true }
-    );
-    res.status(200).json(updatedOrder);
+    const orders = await SellerOrder.find();
+    res.json(orders);
   } catch (err) {
-    console.error(err);
-    res.status(500).send({ status: "Error updating seller order" });
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// PUT - deliveryman accepts the order
+router.put("/:id/accept", async (req, res) => {
+  try {
+    const order = await SellerOrder.findById(req.params.id);
+    if (!order) return res.status(404).json({ message: "Order not found" });
+
+    order.acceptedByDeliveryman = true;
+    order.deliverymanId = req.body.deliverymanId; // optional: store who accepted
+    await order.save();
+
+    res.json({ message: "Order accepted by deliveryman", order });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
   }
 });
 

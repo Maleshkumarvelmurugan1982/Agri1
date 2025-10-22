@@ -97,6 +97,9 @@ const userRouter = require("./routes/user");
 const deliverymenRouter = require("./routes/DeliveryMen");
 const authRouter = require("./routes/auth");
 const appliedSchemesRoutes = require("./routes/appliedSchemes");
+const sellerOrderRoutes = require("./routes/sellerOrderRoutes");
+app.use("/sellerorder", sellerOrderRoutes);
+
 
 app.use("/appliedschemes", appliedSchemesRoutes);
 app.use("/sellerorder", require("./routes/sellerOrders"));

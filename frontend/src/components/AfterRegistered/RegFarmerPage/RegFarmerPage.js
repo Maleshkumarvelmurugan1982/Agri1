@@ -4,7 +4,7 @@ import NavbarRegistered from "../../NavbarRegistered/NavbarRegistered";
 import FooterNew from "../../Footer/FooterNew";
 import RegCategories from "../../AfterRegistered/RegCatoegories/RegCategories";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faChevronRight, faShoppingCart, faTruck, faShoppingBag, faInfoCircle, faThumbsUp, faThumbsDown } from "@fortawesome/free-solid-svg-icons";
+import { faChevronRight, faShoppingCart, faShoppingBag, faInfoCircle, faThumbsUp, faThumbsDown } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
 function FarmerPage() {
@@ -17,16 +17,18 @@ function FarmerPage() {
   const [showSchemes, setShowSchemes] = useState(false);
   const [showAppliedSchemes, setShowAppliedSchemes] = useState(false);
 
+  const [showAllSellerOrders, setShowAllSellerOrders] = useState(false);
+  const [showAllFarmerOrders, setShowAllFarmerOrders] = useState(false);
+  const [showAllDeliveryPosts, setShowAllDeliveryPosts] = useState(false);
+
   const BASE_URL = "http://localhost:8070";
 
-  // Helper function to get full image URL
   const getImageUrl = (imagePath) => {
     if (!imagePath) return 'https://via.placeholder.com/150?text=No+Image';
     if (imagePath.startsWith('http')) return imagePath;
     return `${BASE_URL}${imagePath}`;
   };
 
-  // Fetch farmer data
   useEffect(() => {
     const fetchFarmerData = async () => {
       try {
@@ -53,45 +55,41 @@ function FarmerPage() {
     fetchFarmerData();
   }, []);
 
-  // Fetch other data
   useEffect(() => {
     const fetchSellerOrders = async () => {
       try {
         const response = await fetch(`${BASE_URL}/sellerorder/`);
         const data = await response.json();
         setSellerOrders(data);
-      } catch (error) {
-        console.error("Error fetching seller orders:", error);
+      } catch (err) {
+        console.error(err);
       }
     };
-
     const fetchFarmerOrders = async () => {
       try {
         const response = await fetch(`${BASE_URL}/farmerorder/`);
         const data = await response.json();
         setFarmerOrders(data);
-      } catch (error) {
-        console.error("Error fetching farmer orders:", error);
+      } catch (err) {
+        console.error(err);
       }
     };
-
     const fetchDeliveryPosts = async () => {
       try {
         const response = await fetch(`${BASE_URL}/deliverypost/`);
         const data = await response.json();
         setDeliveryPosts(data);
-      } catch (error) {
-        console.error("Error fetching delivery posts:", error);
+      } catch (err) {
+        console.error(err);
       }
     };
-
     const fetchSchemes = async () => {
       try {
         const response = await fetch(`${BASE_URL}/schemes/`);
         const data = await response.json();
         setSchemes(data);
-      } catch (error) {
-        console.error("Error fetching schemes:", error);
+      } catch (err) {
+        console.error(err);
       }
     };
 
@@ -101,7 +99,6 @@ function FarmerPage() {
     fetchSchemes();
   }, []);
 
-  // Apply for scheme
   const handleApplyScheme = async (scheme) => {
     if (!appliedSchemes.find((s) => s._id === scheme._id) && farmerId) {
       try {
@@ -116,64 +113,46 @@ function FarmerPage() {
         } else {
           alert("Failed to apply scheme");
         }
-      } catch (error) {
-        console.error("Error applying scheme:", error);
+      } catch (err) {
+        console.error(err);
       }
     }
   };
 
-  // Approve or Disapprove Seller Order
   const handleOrderStatus = async (orderId, newStatus) => {
     try {
-      // Find the order
       const order = sellerOrders.find(o => o._id === orderId);
-      
       if (!order) {
         alert("Order not found");
         return;
       }
-
-      // Update order status (backend will handle quantity reduction)
       const res = await fetch(`${BASE_URL}/sellerorder/update/${orderId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ status: newStatus }),
       });
-      
-      if (!res.ok) {
-        const errorData = await res.json();
-        alert(errorData.status || "Failed to update order");
-        return;
-      }
-      
-      const data = await res.json();
-      
-      // Update sellerOrders in state
-      setSellerOrders((prev) =>
-        prev.map((o) =>
-          o._id === orderId ? { ...o, status: newStatus } : o
-        )
+      if (!res.ok) throw new Error("Failed to update order");
+      setSellerOrders(prev =>
+        prev.map(o => o._id === orderId ? { ...o, status: newStatus } : o)
       );
-      
       alert(`Order ${newStatus} successfully!`);
     } catch (err) {
-      console.error("Error updating order:", err);
-      alert("Error updating order. Please try again.");
+      console.error(err);
+      alert("Error updating order");
     }
   };
 
-  // Function to get color based on status
   const getStatusColor = (status) => {
     switch (status?.toLowerCase()) {
-      case "approved":
-        return "green";
-      case "disapproved":
-        return "red";
-      case "pending":
-      default:
-        return "orange";
+      case "approved": return "green";
+      case "disapproved": return "red";
+      default: return "orange";
     }
   };
+
+  const sellerOrdersToDisplay = showAllSellerOrders ? sellerOrders : sellerOrders.slice(0, 4);
+  const farmerOrdersToDisplay = showAllFarmerOrders ? farmerOrders : farmerOrders.slice(0, 4);
+  const deliveryPostsToDisplay = showAllDeliveryPosts ? deliveryPosts : deliveryPosts.slice(0, 4);
 
   return (
     <div>
@@ -187,203 +166,109 @@ function FarmerPage() {
           className="crop-image"
         />
         <div className="type-writer-overlay">
-          <TypeWriter
-            text="Welcome Farmers!"
-            loop={false}
-            textStyle={{
-              fontFamily: "Gill Sans",
-              fontSize: "60px",
-              color: "white",
-              textShadow: "2px 2px 6px rgba(0,0,0,0.6)",
-            }}
-          />
+          <TypeWriter text="Welcome Farmers!" loop={false} textStyle={{ fontFamily:"Gill Sans", fontSize:"60px", color:"white", textShadow:"2px 2px 6px rgba(0,0,0,0.6)"}} />
         </div>
       </div>
 
       {/* Categories */}
       <div className="categories-container">
-        <div className="categories-div">
-          <RegCategories />
-        </div>
+        <div className="categories-div"><RegCategories /></div>
       </div>
 
-      {/* Schemes Buttons */}
+      {/* Schemes */}
       <div className="topic">
         <p>Government Schemes</p>
         <div className="scheme-buttons-container">
-          <button
-            className="view-schemes-btn"
-            onClick={() => {
-              setShowSchemes(!showSchemes);
-              setShowAppliedSchemes(false);
-            }}
-          >
-            View Schemes
-          </button>
-          <button
-            className="applied-schemes-btn"
-            onClick={() => {
-              setShowAppliedSchemes(!showAppliedSchemes);
-              setShowSchemes(false);
-            }}
-          >
-            Applied Schemes
-          </button>
+          <button onClick={() => { setShowSchemes(!showSchemes); setShowAppliedSchemes(false); }}>View Schemes</button>
+          <button onClick={() => { setShowAppliedSchemes(!showAppliedSchemes); setShowSchemes(false); }}>Applied Schemes</button>
         </div>
       </div>
-
-      {/* Schemes List */}
       {showSchemes && (
         <div className="schemes-wrapper">
-          {schemes.length > 0 ? (
-            schemes.map((scheme) => (
-              <div key={scheme._id} className="scheme-item">
-                <p className="scheme-title">{scheme.name}</p>
-                <button className="apply-button" onClick={() => handleApplyScheme(scheme)}>Apply</button>
-              </div>
-            ))
-          ) : (
-            <p>No schemes available right now.</p>
-          )}
+          {schemes.length > 0 ? schemes.map((scheme) => (
+            <div key={scheme._id} className="scheme-item">
+              <p>{scheme.name}</p>
+              <button onClick={() => handleApplyScheme(scheme)}>Apply</button>
+            </div>
+          )) : <p>No schemes available.</p>}
         </div>
       )}
-
-      {/* Applied Schemes List */}
       {showAppliedSchemes && (
         <div className="schemes-wrapper">
-          {appliedSchemes.length > 0 ? (
-            appliedSchemes.map((scheme) => (
-              <div key={scheme._id} className="scheme-item">
-                <p className="scheme-title">{scheme.name}</p>
-              </div>
-            ))
-          ) : (
-            <p>You haven't applied for any schemes yet.</p>
-          )}
+          {appliedSchemes.length > 0 ? appliedSchemes.map((scheme) => (
+            <div key={scheme._id} className="scheme-item">
+              <p>{scheme.name}</p>
+            </div>
+          )) : <p>You haven't applied for any schemes yet.</p>}
         </div>
       )}
 
       {/* Seller Orders */}
-      <div className="topic">
-        <p>Seller's Orders</p>
-      </div>
+      <div className="topic"><p>Seller Orders</p></div>
       <div className="orders-wrapper">
         <div className="orders-container">
-          {sellerOrders.slice(0, 4).map((order) => (
+          {sellerOrdersToDisplay.map((order) => (
             <div key={order._id} className="order-item1">
-              <img 
-                src={getImageUrl(order.productImage)} 
-                alt={order.item} 
-                className="order-image"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
-                }}
-              />
+              <img src={getImageUrl(order.productImage)} alt={order.item} className="order-image" onError={(e)=>{e.target.onerror=null; e.target.src='https://via.placeholder.com/150?text=No+Image'}} />
               <p>{order.item}</p>
               <p>Quantity: {order.quantity}</p>
               <p>Price: Rs.{order.price}</p>
-              <p>District: {order.district}</p>
-              <p>Company: {order.company}</p>
-              <p>Mobile: {order.mobile}</p>
-              <p>Posted Date: {order.postedDate}</p>
-              <p>Expires Date: {order.expireDate}</p>
-              <p>
-                Status:{" "}
-                <b style={{ color: getStatusColor(order.status) }}>
-                  {order.status ? order.status.toUpperCase() : "PENDING"}
-                </b>
-              </p>
+              <p>Status: <b style={{color:getStatusColor(order.status)}}>{order.status?.toUpperCase() || "PENDING"}</b></p>
               <div className="order-buttons">
-                <button className="approve-btn" onClick={() => handleOrderStatus(order._id, "approved")}>
-                  <FontAwesomeIcon icon={faThumbsUp} /> Approve
-                </button>
-                <button className="disapprove-btn" onClick={() => handleOrderStatus(order._id, "disapproved")}>
-                  <FontAwesomeIcon icon={faThumbsDown} /> Disapprove
-                </button>
+                <button onClick={()=>handleOrderStatus(order._id, "approved")}><FontAwesomeIcon icon={faThumbsUp}/> Approve</button>
+                <button onClick={()=>handleOrderStatus(order._id, "disapproved")}><FontAwesomeIcon icon={faThumbsDown}/> Disapprove</button>
               </div>
             </div>
           ))}
         </div>
         {sellerOrders.length > 4 && (
-          <a href="/sellerorder" className="view-all-button">
-            <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-          </a>
+          <button className="view-all-button1" onClick={()=>setShowAllSellerOrders(prev=>!prev)}>
+            {showAllSellerOrders ? "Show Less" : `View All (${sellerOrders.length})`} <FontAwesomeIcon icon={faChevronRight}/>
+          </button>
         )}
       </div>
 
       {/* Farmer Orders */}
-      <div className="topic">
-        <p>Farmer's Orders</p>
-      </div>
+      <div className="topic"><p>Farmer Orders</p></div>
       <div className="orders-wrapper">
         <div className="orders-container">
-          {farmerOrders.slice(0, 4).map((order, index) => (
-            <div key={index} className="order-item">
-              <img 
-                src={getImageUrl(order.productImage)} 
-                alt={order.item} 
-                className="order-image"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
-                }}
-              />
+          {farmerOrdersToDisplay.map((order) => (
+            <div key={order._id} className="order-item1">
+              <img src={getImageUrl(order.productImage)} alt={order.item} className="order-image" onError={(e)=>{e.target.onerror=null; e.target.src='https://via.placeholder.com/150?text=No+Image'}} />
               <p>{order.item}</p>
               <p>Quantity: {order.quantity}</p>
               <p>Price: Rs.{order.price}</p>
-              <p>Posted Date: {order.postedDate}</p>
-              <p>Expires Date: {order.expireDate}</p>
-              <button className="cart-button">
-                <FontAwesomeIcon icon={faShoppingCart} /> Add to Cart
-              </button>
-              <button className="supply-button">
-                <FontAwesomeIcon icon={faShoppingBag} /> Buy Now
-              </button>
+              <button className="cart-button"><FontAwesomeIcon icon={faShoppingCart}/> Add to Cart</button>
+              <button className="supply-button"><FontAwesomeIcon icon={faShoppingBag}/> Buy Now</button>
             </div>
           ))}
         </div>
         {farmerOrders.length > 4 && (
-          <a href="/farmerorder" className="view-all-button1">
-            <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-          </a>
+          <button className="view-all-button1" onClick={()=>setShowAllFarmerOrders(prev=>!prev)}>
+            {showAllFarmerOrders ? "Show Less" : `View All (${farmerOrders.length})`} <FontAwesomeIcon icon={faChevronRight}/>
+          </button>
         )}
       </div>
 
       {/* Delivery Services */}
-      <div className="topic">
-        <p>Delivery Services</p>
-      </div>
+      <div className="topic"><p>Delivery Services</p></div>
       <div className="orders-wrapper">
         <div className="orders-container">
-          {deliveryPosts.slice(0, 4).map((order, index) => (
-            <div key={index} className="order-item">
-              <img 
-                src={getImageUrl(order.vehicleImage)} 
-                alt={order.model} 
-                className="order-image"
-                onError={(e) => {
-                  e.target.onerror = null;
-                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
-                }}
-              />
+          {deliveryPostsToDisplay.map((order) => (
+            <div key={order._id} className="order-item1">
+              <img src={getImageUrl(order.vehicleImage)} alt={order.model} className="order-image" onError={(e)=>{e.target.onerror=null; e.target.src='https://via.placeholder.com/150?text=No+Image'}} />
               <p>{order.model}</p>
               <p>Capacity: {order.capacity} kg</p>
               <p>Price: Rs.{order.price}/km</p>
-              <p>Posted Date: {order.postedDate}</p>
-              <button className="cart-button">
-                <FontAwesomeIcon icon={faShoppingCart} /> Add to Cart
-              </button>
-              <button className="supply-button">
-                <FontAwesomeIcon icon={faInfoCircle} /> More Details
-              </button>
+              <button className="cart-button"><FontAwesomeIcon icon={faShoppingCart}/> Add to Cart</button>
+              <button className="supply-button"><FontAwesomeIcon icon={faInfoCircle}/> More Details</button>
             </div>
           ))}
         </div>
         {deliveryPosts.length > 4 && (
-          <a href="/deliverypost" className="view-all-button1">
-            <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-          </a>
+          <button className="view-all-button1" onClick={()=>setShowAllDeliveryPosts(prev=>!prev)}>
+            {showAllDeliveryPosts ? "Show Less" : `View All (${deliveryPosts.length})`} <FontAwesomeIcon icon={faChevronRight}/>
+          </button>
         )}
       </div>
 
