@@ -6,6 +6,8 @@ import RegCategories from "../RegCatoegories/RegCategories";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
 import {
   faChevronRight,
+  faCheckCircle,
+  faTimesCircle,
 } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
@@ -13,6 +15,7 @@ function RegSellerPage() {
   const [sellerOrders, setSellerOrders] = useState([]);
   const [deliveryPosts, setDeliveryPosts] = useState([]);
   const [imageErrors, setImageErrors] = useState({});
+  const [toasts, setToasts] = useState([]);
   const notifiedOrdersRef = useRef(new Set());
 
   // Backend URL
@@ -22,30 +25,122 @@ function RegSellerPage() {
   const fallbackProductImage = "https://via.placeholder.com/300x200?text=Product+Image";
   const fallbackVehicleImage = "https://via.placeholder.com/300x200?text=Vehicle+Image";
 
+  // Inline styles
+  const styles = {
+    toastContainer: {
+      position: 'fixed',
+      top: '80px',
+      right: '20px',
+      zIndex: 9999,
+      display: 'flex',
+      flexDirection: 'column',
+      gap: '10px',
+      maxWidth: '400px',
+    },
+    toast: {
+      display: 'flex',
+      alignItems: 'center',
+      padding: '15px 20px',
+      borderRadius: '8px',
+      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+      backgroundColor: '#fff',
+      animation: 'slideIn 0.3s ease-out',
+      minWidth: '300px',
+      maxWidth: '400px',
+    },
+    toastSuccess: {
+      borderLeft: '4px solid #4caf50',
+    },
+    toastError: {
+      borderLeft: '4px solid #f44336',
+    },
+    toastIcon: {
+      fontSize: '24px',
+      marginRight: '15px',
+      display: 'flex',
+      alignItems: 'center',
+    },
+    toastIconSuccess: {
+      color: '#4caf50',
+    },
+    toastIconError: {
+      color: '#f44336',
+    },
+    toastMessage: {
+      flex: 1,
+      fontSize: '14px',
+      color: '#333',
+      lineHeight: '1.5',
+    },
+    toastClose: {
+      background: 'none',
+      border: 'none',
+      fontSize: '24px',
+      color: '#999',
+      cursor: 'pointer',
+      padding: 0,
+      marginLeft: '10px',
+      width: '24px',
+      height: '24px',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      transition: 'color 0.2s',
+    },
+  };
+
   // Helper function to get full image URL
   const getImageUrl = (imagePath) => {
     if (!imagePath) return null;
     
-    // If it's already a full URL, return as is
     if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
       return imagePath;
     }
     
-    // If it starts with /uploads, append to backend URL
     if (imagePath.startsWith('/uploads')) {
       return `${BACKEND_URL}${imagePath}`;
     }
     
-    // If it's just a filename, construct the full path
     if (imagePath.startsWith('uploads/')) {
       return `${BACKEND_URL}/${imagePath}`;
     }
     
-    // Default case: assume it's in uploads folder
     return `${BACKEND_URL}/uploads/${imagePath}`;
   };
 
+  // Function to show toast notification
+  const showToast = (message, type = 'success') => {
+    const id = Date.now();
+    const newToast = { id, message, type };
+    setToasts((prev) => [...prev, newToast]);
+
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((toast) => toast.id !== id));
+    }, 5000);
+  };
+
+  // Function to remove toast manually
+  const removeToast = (id) => {
+    setToasts((prev) => prev.filter((toast) => toast.id !== id));
+  };
+
   useEffect(() => {
+    // Add keyframe animation to document
+    const styleSheet = document.createElement("style");
+    styleSheet.textContent = `
+      @keyframes slideIn {
+        from {
+          transform: translateX(400px);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+    `;
+    document.head.appendChild(styleSheet);
+
     const fetchSellerOrders = async () => {
       try {
         const response = await fetch(`${BACKEND_URL}/sellerorder`);
@@ -54,16 +149,19 @@ function RegSellerPage() {
         }
         const data = await response.json();
 
-        console.log("Fetched seller orders:", data); // Debug log
+        console.log("Fetched seller orders:", data);
 
-        // Alert seller for approved/disapproved orders they haven't been notified of
         data.forEach((order) => {
           if (
             order.status &&
             !notifiedOrdersRef.current.has(order._id) &&
             (order.status === "approved" || order.status === "disapproved")
           ) {
-            window.alert(`Your order for ${order.item} has been ${order.status}!`);
+            const type = order.status === "approved" ? "success" : "error";
+            showToast(
+              `Your order for ${order.item} has been ${order.status}!`,
+              type
+            );
             notifiedOrdersRef.current.add(order._id);
           }
         });
@@ -71,6 +169,7 @@ function RegSellerPage() {
         setSellerOrders(data);
       } catch (error) {
         console.error("Error fetching seller orders:", error);
+        showToast("Failed to fetch seller orders", "error");
       }
     };
 
@@ -81,23 +180,26 @@ function RegSellerPage() {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
-        console.log("Fetched delivery posts:", data); // Debug log
+        console.log("Fetched delivery posts:", data);
         setDeliveryPosts(data);
       } catch (error) {
         console.error("Error fetching delivery posts:", error);
+        showToast("Failed to fetch delivery services", "error");
       }
     };
 
     fetchSellerOrders();
     fetchDeliveryPosts();
 
-    // Optional: Set up polling to check for new orders every 30 seconds
     const interval = setInterval(() => {
       fetchSellerOrders();
       fetchDeliveryPosts();
     }, 30000);
 
-    return () => clearInterval(interval);
+    return () => {
+      clearInterval(interval);
+      document.head.removeChild(styleSheet);
+    };
   }, []);
 
   const handleImageError = (id, type, originalSrc) => {
@@ -109,6 +211,41 @@ function RegSellerPage() {
     <div>
       <NavbarRegistered />
       <div className="nothing"></div>
+
+      {/* Toast Container */}
+      <div style={styles.toastContainer}>
+        {toasts.map((toast) => (
+          <div
+            key={toast.id}
+            style={{
+              ...styles.toast,
+              ...(toast.type === 'success' ? styles.toastSuccess : styles.toastError)
+            }}
+          >
+            <div 
+              style={{
+                ...styles.toastIcon,
+                ...(toast.type === 'success' ? styles.toastIconSuccess : styles.toastIconError)
+              }}
+            >
+              {toast.type === 'success' ? (
+                <FontAwesomeIcon icon={faCheckCircle} />
+              ) : (
+                <FontAwesomeIcon icon={faTimesCircle} />
+              )}
+            </div>
+            <div style={styles.toastMessage}>{toast.message}</div>
+            <button
+              style={styles.toastClose}
+              onClick={() => removeToast(toast.id)}
+              onMouseEnter={(e) => e.target.style.color = '#333'}
+              onMouseLeave={(e) => e.target.style.color = '#999'}
+            >
+              &times;
+            </button>
+          </div>
+        ))}
+      </div>
 
       <div className="crop-container">
         <img
@@ -158,7 +295,7 @@ function RegSellerPage() {
                 ? fallbackProductImage 
                 : imageUrl || fallbackProductImage;
               
-              console.log(`Order ${index} image URL:`, displayImage); // Debug log
+              console.log(`Order ${index} image URL:`, displayImage);
               
               return (
                 <div key={order._id || index} className="order-item">
@@ -208,7 +345,7 @@ function RegSellerPage() {
                 ? fallbackVehicleImage
                 : imageUrl || fallbackVehicleImage;
               
-              console.log(`Delivery ${index} image URL:`, displayImage); // Debug log
+              console.log(`Delivery ${index} image URL:`, displayImage);
               
               return (
                 <div key={post._id || index} className="order-item">
