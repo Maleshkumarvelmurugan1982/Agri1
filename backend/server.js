@@ -98,6 +98,8 @@ const deliverymenRouter = require("./routes/DeliveryMen");
 const authRouter = require("./routes/auth");
 const appliedSchemesRoutes = require("./routes/appliedSchemes");
 const sellerOrderRoutes = require("./routes/sellerOrderRoutes");
+const maleshRoutes = require('./routes/malesh'); // Adjust path as needed
+app.use('/sellerorder', maleshRoutes);
 app.use("/sellerorder", sellerOrderRoutes);
 
 

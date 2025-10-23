@@ -10,6 +10,8 @@ import {
   faTruck,
   faInfoCircle,
   faMoneyBillWave,
+  faCheckCircle,
+  faTimesCircle,
 } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
@@ -32,6 +34,7 @@ function RegDeliverymanPage({ deliverymanId }) {
           .map(order => ({
             ...order,
             acceptedByDeliveryman: order.acceptedByDeliveryman || false,
+            deliveryStatus: order.deliveryStatus || "pending",
           }));
         setSellerOrders(approvedSellerOrders);
 
@@ -42,6 +45,7 @@ function RegDeliverymanPage({ deliverymanId }) {
           .map(order => ({
             ...order,
             acceptedByDeliveryman: order.acceptedByDeliveryman || false,
+            deliveryStatus: order.deliveryStatus || "pending",
           }));
         setFarmerOrders(approvedFarmerOrders);
 
@@ -66,26 +70,97 @@ function RegDeliverymanPage({ deliverymanId }) {
   // Handle deliveryman accepting order
   const handleAcceptDelivery = async (orderId, type) => {
     try {
-      // Optimistic frontend update
+      console.log(`Accepting ${type} order ${orderId}`);
+      
+      // Persist in backend
+      if (type === "seller") {
+        const response = await axios.put(`http://localhost:8070/sellerorder/${orderId}/accept`, { 
+          deliverymanId 
+        });
+        console.log("Accept response:", response.data);
+        
+        // Update frontend after successful backend update
+        setSellerOrders(prev =>
+          prev.map(order =>
+            order._id === orderId 
+              ? { ...order, acceptedByDeliveryman: true, deliveryStatus: "approved" } 
+              : order
+          )
+        );
+      } else {
+        const response = await axios.put(`http://localhost:8070/farmerorder/${orderId}/accept`, { 
+          deliverymanId 
+        });
+        console.log("Accept response:", response.data);
+        
+        // Update frontend after successful backend update
+        setFarmerOrders(prev =>
+          prev.map(order =>
+            order._id === orderId 
+              ? { ...order, acceptedByDeliveryman: true, deliveryStatus: "approved" } 
+              : order
+          )
+        );
+      }
+      
+      alert("✅ Order accepted successfully!");
+    } catch (err) {
+      console.error("Error accepting delivery:", err);
+      console.error("Error response:", err.response?.data);
+      alert(`Failed to accept order: ${err.response?.data?.message || err.message}`);
+    }
+  };
+
+  // Handle delivery status update (delivered / not-delivered)
+  const handleDeliveryStatus = async (orderId, type, status) => {
+    try {
+      console.log(`Attempting to update ${type} order ${orderId} to status: ${status}`);
+      
+      // Persist in backend FIRST
+      const url = type === "seller" 
+        ? `http://localhost:8070/sellerorder/${orderId}/status`
+        : `http://localhost:8070/farmerorder/${orderId}/status`;
+      
+      console.log(`Making PUT request to: ${url}`);
+      console.log(`Request body:`, { status });
+      
+      const response = await axios.put(url, { status });
+      
+      console.log(`✅ Backend update successful:`, response.data);
+
+      // Update frontend AFTER successful backend update
       if (type === "seller") {
         setSellerOrders(prev =>
           prev.map(order =>
-            order._id === orderId ? { ...order, acceptedByDeliveryman: true } : order
+            order._id === orderId ? { ...order, deliveryStatus: status } : order
           )
         );
-        // Persist in backend
-        await axios.put(`http://localhost:8070/sellerorder/${orderId}/accept`, { deliverymanId });
       } else {
         setFarmerOrders(prev =>
           prev.map(order =>
-            order._id === orderId ? { ...order, acceptedByDeliveryman: true } : order
+            order._id === orderId ? { ...order, deliveryStatus: status } : order
           )
         );
-        // Persist in backend
-        await axios.put(`http://localhost:8070/farmerorder/${orderId}/accept`, { deliverymanId });
       }
+
+      alert(`✅ Order status updated to ${status} successfully!`);
     } catch (err) {
-      console.error("Error accepting delivery:", err);
+      console.error("❌ Error updating delivery status:", err);
+      
+      if (err.response) {
+        // Server responded with error
+        console.error("Response data:", err.response.data);
+        console.error("Response status:", err.response.status);
+        alert(`Failed to update: ${err.response.data?.message || 'Server error'}`);
+      } else if (err.request) {
+        // Request made but no response
+        console.error("No response received:", err.request);
+        alert("Failed to update: No response from server. Check if backend is running.");
+      } else {
+        // Something else happened
+        console.error("Error message:", err.message);
+        alert(`Failed to update: ${err.message}`);
+      }
     }
   };
 
@@ -93,42 +168,106 @@ function RegDeliverymanPage({ deliverymanId }) {
     return <p style={{ textAlign: "center", marginTop: "50px" }}>Loading...</p>;
   }
 
+  // Render delivery status badge
+  const renderDeliveryStatusBadge = (status) => {
+    if (status === "delivered") {
+      return (
+        <div className="status-badge delivered-badge">
+          <FontAwesomeIcon icon={faCheckCircle} /> Delivered
+        </div>
+      );
+    } else if (status === "not-delivered") {
+      return (
+        <div className="status-badge not-delivered-badge">
+          <FontAwesomeIcon icon={faTimesCircle} /> Not Delivered
+        </div>
+      );
+    }
+    return null;
+  };
+
   // Render orders
-  const renderOrders = (orders, type) => (
-    <>
-      <div className="orders-container">
-        {orders.slice(0, 4).map((order, index) => (
-          <div key={index} className="order-item">
-            <img
-              src={`http://localhost:8070${order.productImage}`}
-              alt={order.item}
-              className="order-image"
-            />
-            <p>{order.item}</p>
-            <p>Quantity: {order.quantity}</p>
-            <p>Pickup: {type === "seller" ? "Seller" : "Farmer"}</p>
-            <p>Deliver To: Buyer</p>
-            <button
-              className="cart-button"
-              onClick={() => handleAcceptDelivery(order._id, type)}
-              disabled={order.acceptedByDeliveryman}
-            >
-              <FontAwesomeIcon icon={faTruck} />{" "}
-              {order.acceptedByDeliveryman ? "You Approved Delivery" : "Accept Delivery"}
-            </button>
-            <button className="supply-button">
-              <FontAwesomeIcon icon={faInfoCircle} /> More Info
-            </button>
-          </div>
-        ))}
-      </div>
-      {orders.length > 4 && (
-        <a href={`/${type}order`} className="view-all-button1">
-          <FontAwesomeIcon icon={faChevronRight} className="arrow-icon" />
-        </a>
-      )}
-    </>
-  );
+  const renderOrders = (orders, type) => {
+    console.log(`Rendering ${type} orders:`, orders.map(o => ({
+      id: o._id,
+      item: o.item,
+      accepted: o.acceptedByDeliveryman,
+      status: o.deliveryStatus
+    })));
+
+    return (
+      <>
+        <div className="orders-container">
+          {orders.map((order) => {
+            console.log(`Order ${order._id}:`, {
+              accepted: order.acceptedByDeliveryman,
+              status: order.deliveryStatus
+            });
+
+            return (
+              <div key={order._id} className="order-item">
+                <img
+                  src={`http://localhost:8070${order.productImage}`}
+                  alt={order.item}
+                  className="order-image"
+                />
+                <p>{order.item}</p>
+                <p>Quantity: {order.quantity}</p>
+                <p>Pickup: {type === "seller" ? "Seller" : "Farmer"}</p>
+                <p>Deliver To: Buyer</p>
+
+                {/* Show Accept Delivery button if not yet accepted */}
+                {!order.acceptedByDeliveryman && (
+                  <button
+                    className="cart-button"
+                    onClick={() => handleAcceptDelivery(order._id, type)}
+                  >
+                    <FontAwesomeIcon icon={faTruck} /> Accept Delivery
+                  </button>
+                )}
+
+                {/* Show status controls once accepted */}
+                {order.acceptedByDeliveryman && (
+                  <>
+                    <button className="cart-button approved-button" disabled>
+                      <FontAwesomeIcon icon={faTruck} /> You Approved Delivery
+                    </button>
+
+                    {/* Show Delivered/Not Delivered buttons if status is still "approved" */}
+                    {order.deliveryStatus === "approved" && (
+                      <div className="delivery-status-buttons">
+                        <button
+                          className="delivered-button"
+                          onClick={() => handleDeliveryStatus(order._id, type, "delivered")}
+                        >
+                          <FontAwesomeIcon icon={faCheckCircle} /> Delivered
+                        </button>
+                        <button
+                          className="not-delivered-button"
+                          onClick={() => handleDeliveryStatus(order._id, type, "not-delivered")}
+                        >
+                          <FontAwesomeIcon icon={faTimesCircle} /> Not Delivered
+                        </button>
+                      </div>
+                    )}
+
+                    {/* Show final status badge if marked as delivered/not-delivered */}
+                    {(order.deliveryStatus === "delivered" || order.deliveryStatus === "not-delivered") && 
+                      renderDeliveryStatusBadge(order.deliveryStatus)
+                    }
+                  </>
+                )}
+
+                <button className="supply-button">
+                  <FontAwesomeIcon icon={faInfoCircle} /> More Info
+                </button>
+              </div>
+            );
+          })}
+        </div>
+      </>
+    );
+  };
 
   return (
     <div>

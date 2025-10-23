@@ -15,10 +15,17 @@ const sellerOrderSchema = new mongoose.Schema({
   postedDate: String,
   expireDate: String,
   status: { type: String, default: "pending" },
-  
-  // ✅ NEW: Track if deliveryman accepted this order
+
+  // ✅ Track if deliveryman accepted this order
   acceptedByDeliveryman: { type: Boolean, default: false },
   deliverymanId: { type: mongoose.Schema.Types.ObjectId, ref: "Deliveryman", default: null },
+
+  // ✅ NEW: Track delivery status
+  deliveryStatus: {
+    type: String,
+    enum: ["pending", "approved", "delivered", "not-delivered"],
+    default: "pending",
+  }
 }, {
   timestamps: true
 });
