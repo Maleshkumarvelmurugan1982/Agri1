@@ -13,7 +13,9 @@ import {
   faThumbsDown, 
   faTruck, 
   faCheckCircle, 
-  faTimesCircle 
+  faTimesCircle,
+  faHistory,
+  faTimes
 } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
@@ -26,6 +28,7 @@ function FarmerPage() {
   const [appliedSchemes, setAppliedSchemes] = useState([]);
   const [showSchemes, setShowSchemes] = useState(false);
   const [showAppliedSchemes, setShowAppliedSchemes] = useState(false);
+  const [showHistory, setShowHistory] = useState(false);
 
   const [showAllSellerOrders, setShowAllSellerOrders] = useState(false);
   const [showAllFarmerOrders, setShowAllFarmerOrders] = useState(false);
@@ -66,9 +69,11 @@ function FarmerPage() {
   }, []);
 
   useEffect(() => {
+    if (!farmerId) return;
+    
     const fetchSellerOrders = async () => {
       try {
-        const response = await fetch(`${BASE_URL}/sellerorder/`);
+        const response = await fetch(`${BASE_URL}/sellerorder/farmer/${farmerId}`);
         
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
@@ -99,7 +104,10 @@ function FarmerPage() {
         const response = await fetch(`${BASE_URL}/farmerorder/`);
         if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
         const data = await response.json();
-        setFarmerOrders(Array.isArray(data) ? data : (data.data && Array.isArray(data.data) ? data.data : []));
+        
+        const orders = Array.isArray(data) ? data : (data.data && Array.isArray(data.data) ? data.data : []);
+        const filteredOrders = orders.filter(order => order.farmerId !== farmerId);
+        setFarmerOrders(filteredOrders);
       } catch (err) {
         console.error("Error fetching farmer orders:", err);
         setFarmerOrders([]);
@@ -134,7 +142,7 @@ function FarmerPage() {
     fetchFarmerOrders();
     fetchDeliveryPosts();
     fetchSchemes();
-  }, []);
+  }, [farmerId]);
 
   const handleApplyScheme = async (scheme) => {
     if (!appliedSchemes.find((s) => s._id === scheme._id) && farmerId) {
@@ -206,9 +214,33 @@ function FarmerPage() {
     return null;
   };
 
+  const formatDate = (dateString) => {
+    if (!dateString) return "Date not available";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+  };
+
+  const getSoldProducts = () => {
+    return sellerOrders
+      .filter(order => 
+        order.status === "approved" && 
+        (order.deliveryStatus === "delivered" || order.deliveryStatus === "approved")
+      )
+      .sort((a, b) => {
+        const dateA = new Date(a.updatedAt || a.createdAt || 0);
+        const dateB = new Date(b.updatedAt || b.createdAt || 0);
+        return dateB - dateA;
+      });
+  };
+
+  const soldProducts = getSoldProducts();
   const sellerOrdersToDisplay = showAllSellerOrders ? sellerOrders : sellerOrders.slice(0, 4);
-  const farmerOrdersToDisplay = showAllFarmerOrders ? farmerOrders : farmerOrders.slice(0, 4);
-  const deliveryPostsToDisplay = showAllDeliveryPosts ? deliveryPosts : deliveryPosts.slice(0, 4);
 
   return (
     <div>
@@ -242,150 +274,512 @@ function FarmerPage() {
         </div>
       </div>
 
+      {/* History Button */}
+      <div className="history-button-container" style={{ textAlign: 'center', margin: '20px 0' }}>
+        <button 
+          className="history-button"
+          onClick={() => setShowHistory(!showHistory)}
+          style={{
+            padding: '12px 30px',
+            fontSize: '16px',
+            backgroundColor: '#28a745',
+            color: 'white',
+            border: 'none',
+            borderRadius: '5px',
+            cursor: 'pointer',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '10px',
+            transition: 'all 0.3s ease'
+          }}
+          onMouseOver={(e) => e.target.style.backgroundColor = '#218838'}
+          onMouseOut={(e) => e.target.style.backgroundColor = '#28a745'}
+        >
+          <FontAwesomeIcon icon={faHistory} />
+          {showHistory ? 'Hide History' : `View Sales History (${soldProducts.length})`}
+        </button>
+      </div>
+
+      {/* History Section */}
+      {showHistory && (
+        <div className="history-section" style={{
+          margin: '20px auto',
+          maxWidth: '1200px',
+          padding: '20px',
+          backgroundColor: '#f8f9fa',
+          borderRadius: '10px',
+          boxShadow: '0 4px 6px rgba(0,0,0,0.1)'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            justifyContent: 'space-between', 
+            alignItems: 'center',
+            marginBottom: '20px'
+          }}>
+            <h2 style={{ margin: 0, color: '#333' }}>
+              <FontAwesomeIcon icon={faHistory} /> Sales History
+            </h2>
+            <button 
+              onClick={() => setShowHistory(false)}
+              style={{
+                background: 'none',
+                border: 'none',
+                fontSize: '24px',
+                cursor: 'pointer',
+                color: '#666'
+              }}
+            >
+              <FontAwesomeIcon icon={faTimes} />
+            </button>
+          </div>
+
+          {soldProducts.length === 0 ? (
+            <p style={{ textAlign: 'center', fontSize: '18px', color: '#666', padding: '40px' }}>
+              No sales history yet. Your delivered orders will appear here.
+            </p>
+          ) : (
+            <div className="history-list">
+              {soldProducts.map((order) => {
+                const hasDeliverymanInfo = order.deliverymanId && typeof order.deliverymanId === 'object';
+                const deliverymanName = hasDeliverymanInfo 
+                  ? `${order.deliverymanId.fname || ''} ${order.deliverymanId.lname || ''}`.trim() 
+                  : 'Assigned';
+
+                const hasSellerInfo = order.sellerId && typeof order.sellerId === 'object';
+                const sellerName = hasSellerInfo 
+                  ? `${order.sellerId.fname || ''} ${order.sellerId.lname || ''}`.trim() || 'Unknown Seller'
+                  : 'Unknown Seller';
+
+                return (
+                  <div 
+                    key={order._id} 
+                    className="history-item"
+                    style={{
+                      backgroundColor: 'white',
+                      borderRadius: '8px',
+                      padding: '20px',
+                      marginBottom: '15px',
+                      boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
+                      display: 'grid',
+                      gridTemplateColumns: '150px 1fr',
+                      gap: '20px'
+                    }}
+                  >
+                    <img 
+                      src={getImageUrl(order.productImage)} 
+                      alt={order.item}
+                      style={{
+                        width: '100%',
+                        height: '150px',
+                        objectFit: 'cover',
+                        borderRadius: '8px'
+                      }}
+                      onError={(e) => {
+                        e.target.onerror = null; 
+                        e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                      }} 
+                    />
+                    <div>
+                      <h3 style={{ margin: '0 0 10px 0', color: '#333' }}>{order.item}</h3>
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                        <p><strong>Quantity:</strong> {order.quantity}</p>
+                        <p><strong>Price:</strong> Rs.{order.price}</p>
+                        <p><strong>Status:</strong> <span style={{ color: 'green' }}>✓ DELIVERED</span></p>
+                        <p><strong>Date:</strong> {formatDate(order.updatedAt || order.createdAt)}</p>
+                        <p style={{ gridColumn: '1 / -1' }}>
+                          <strong>Delivered to:</strong> {sellerName}
+                        </p>
+                      </div>
+                      {hasDeliverymanInfo && (
+                        <div style={{ 
+                          marginTop: '10px', 
+                          padding: '10px', 
+                          backgroundColor: '#e9f7ef', 
+                          borderRadius: '5px' 
+                        }}>
+                          <p style={{ margin: '5px 0' }}>
+                            <FontAwesomeIcon icon={faTruck} /> 
+                            <strong> Delivered by:</strong> {deliverymanName}
+                          </p>
+                          {order.deliverymanId.mobile && (
+                            <p style={{ margin: '5px 0' }}>
+                              <strong>Contact:</strong> {order.deliverymanId.mobile}
+                            </p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Schemes */}
       <div className="topic">
         <p>Government Schemes</p>
-        <div className="scheme-buttons-container">
-          <button onClick={() => { setShowSchemes(!showSchemes); setShowAppliedSchemes(false); }}>
+        <div style={{ 
+          display: 'flex', 
+          gap: '15px', 
+          justifyContent: 'center',
+          marginTop: '20px'
+        }}>
+          <button 
+            onClick={() => { setShowSchemes(!showSchemes); setShowAppliedSchemes(false); }}
+            style={{
+              padding: '12px 30px',
+              fontSize: '16px',
+              fontWeight: '600',
+              backgroundColor: showSchemes ? '#007bff' : '#fff',
+              color: showSchemes ? '#fff' : '#007bff',
+              border: '2px solid #007bff',
+              borderRadius: '25px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: showSchemes ? '0 4px 8px rgba(0,123,255,0.3)' : 'none'
+            }}
+            onMouseOver={(e) => {
+              if (!showSchemes) {
+                e.target.style.backgroundColor = '#007bff';
+                e.target.style.color = '#fff';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!showSchemes) {
+                e.target.style.backgroundColor = '#fff';
+                e.target.style.color = '#007bff';
+              }
+            }}
+          >
             View Schemes
           </button>
-          <button onClick={() => { setShowAppliedSchemes(!showAppliedSchemes); setShowSchemes(false); }}>
+          <button 
+            onClick={() => { setShowAppliedSchemes(!showAppliedSchemes); setShowSchemes(false); }}
+            style={{
+              padding: '12px 30px',
+              fontSize: '16px',
+              fontWeight: '600',
+              backgroundColor: showAppliedSchemes ? '#28a745' : '#fff',
+              color: showAppliedSchemes ? '#fff' : '#28a745',
+              border: '2px solid #28a745',
+              borderRadius: '25px',
+              cursor: 'pointer',
+              transition: 'all 0.3s ease',
+              boxShadow: showAppliedSchemes ? '0 4px 8px rgba(40,167,69,0.3)' : 'none'
+            }}
+            onMouseOver={(e) => {
+              if (!showAppliedSchemes) {
+                e.target.style.backgroundColor = '#28a745';
+                e.target.style.color = '#fff';
+              }
+            }}
+            onMouseOut={(e) => {
+              if (!showAppliedSchemes) {
+                e.target.style.backgroundColor = '#fff';
+                e.target.style.color = '#28a745';
+              }
+            }}
+          >
             Applied Schemes
           </button>
         </div>
       </div>
       
       {showSchemes && (
-        <div className="schemes-wrapper">
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          gap: '25px',
+          padding: '30px',
+          maxWidth: '1200px',
+          margin: '0 auto'
+        }}>
           {schemes.length > 0 ? schemes.map((scheme) => (
-            <div key={scheme._id} className="scheme-item">
-              <p>{scheme.name}</p>
-              <button onClick={() => handleApplyScheme(scheme)}>Apply</button>
+            <div 
+              key={scheme._id}
+              style={{
+                backgroundColor: '#fff',
+                borderRadius: '15px',
+                padding: '25px',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
+                transition: 'all 0.3s ease',
+                border: '2px solid transparent',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-8px)';
+                e.currentTarget.style.boxShadow = '0 12px 30px rgba(0,123,255,0.2)';
+                e.currentTarget.style.borderColor = '#007bff';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.1)';
+                e.currentTarget.style.borderColor = 'transparent';
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: '-50px',
+                right: '-50px',
+                width: '100px',
+                height: '100px',
+                backgroundColor: '#007bff',
+                opacity: '0.1',
+                borderRadius: '50%'
+              }}></div>
+              <p style={{
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#333',
+                marginBottom: '20px',
+                minHeight: '50px',
+                position: 'relative',
+                zIndex: 1
+              }}>{scheme.name}</p>
+              <button 
+                onClick={() => handleApplyScheme(scheme)}
+                disabled={appliedSchemes.find((s) => s._id === scheme._id)}
+                style={{
+                  width: '100%',
+                  padding: '12px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  backgroundColor: appliedSchemes.find((s) => s._id === scheme._id) ? '#6c757d' : '#007bff',
+                  color: '#fff',
+                  border: 'none',
+                  borderRadius: '8px',
+                  cursor: appliedSchemes.find((s) => s._id === scheme._id) ? 'not-allowed' : 'pointer',
+                  transition: 'all 0.3s ease',
+                  position: 'relative',
+                  zIndex: 1
+                }}
+                onMouseOver={(e) => {
+                  if (!appliedSchemes.find((s) => s._id === scheme._id)) {
+                    e.target.style.backgroundColor = '#0056b3';
+                    e.target.style.transform = 'scale(1.05)';
+                  }
+                }}
+                onMouseOut={(e) => {
+                  if (!appliedSchemes.find((s) => s._id === scheme._id)) {
+                    e.target.style.backgroundColor = '#007bff';
+                    e.target.style.transform = 'scale(1)';
+                  }
+                }}
+              >
+                {appliedSchemes.find((s) => s._id === scheme._id) ? '✓ Already Applied' : 'Apply Now'}
+              </button>
             </div>
-          )) : <p>No schemes available.</p>}
+          )) : (
+            <p style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              fontSize: '18px',
+              color: '#666',
+              padding: '40px'
+            }}>No schemes available.</p>
+          )}
         </div>
       )}
       
       {showAppliedSchemes && (
-        <div className="schemes-wrapper">
+        <div style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fill, minmax(300px, 1fr))',
+          gap: '25px',
+          padding: '30px',
+          maxWidth: '1200px',
+          margin: '0 auto'
+        }}>
           {appliedSchemes.length > 0 ? appliedSchemes.map((scheme) => (
-            <div key={scheme._id} className="scheme-item">
-              <p>{scheme.name}</p>
+            <div 
+              key={scheme._id}
+              style={{
+                backgroundColor: '#fff',
+                borderRadius: '15px',
+                padding: '25px',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.1)',
+                transition: 'all 0.3s ease',
+                border: '2px solid #28a745',
+                position: 'relative',
+                overflow: 'hidden'
+              }}
+              onMouseOver={(e) => {
+                e.currentTarget.style.transform = 'translateY(-8px)';
+                e.currentTarget.style.boxShadow = '0 12px 30px rgba(40,167,69,0.2)';
+              }}
+              onMouseOut={(e) => {
+                e.currentTarget.style.transform = 'translateY(0)';
+                e.currentTarget.style.boxShadow = '0 6px 20px rgba(0,0,0,0.1)';
+              }}
+            >
+              <div style={{
+                position: 'absolute',
+                top: '10px',
+                right: '10px',
+                backgroundColor: '#28a745',
+                color: '#fff',
+                padding: '5px 15px',
+                borderRadius: '20px',
+                fontSize: '14px',
+                fontWeight: '600'
+              }}>
+                ✓ Applied
+              </div>
+              <div style={{
+                position: 'absolute',
+                bottom: '-50px',
+                left: '-50px',
+                width: '100px',
+                height: '100px',
+                backgroundColor: '#28a745',
+                opacity: '0.1',
+                borderRadius: '50%'
+              }}></div>
+              <p style={{
+                fontSize: '18px',
+                fontWeight: '600',
+                color: '#333',
+                marginBottom: '15px',
+                minHeight: '50px',
+                paddingRight: '80px',
+                position: 'relative',
+                zIndex: 1
+              }}>{scheme.name}</p>
+              <div style={{
+                padding: '10px',
+                backgroundColor: '#d4edda',
+                borderRadius: '8px',
+                textAlign: 'center',
+                color: '#155724',
+                fontWeight: '600',
+                fontSize: '14px',
+                position: 'relative',
+                zIndex: 1
+              }}>
+                Application Submitted
+              </div>
             </div>
-          )) : <p>You haven't applied for any schemes yet.</p>}
+          )) : (
+            <p style={{
+              gridColumn: '1 / -1',
+              textAlign: 'center',
+              fontSize: '18px',
+              color: '#666',
+              padding: '40px'
+            }}>You haven't applied for any schemes yet.</p>
+          )}
         </div>
       )}
 
       {/* Seller Orders */}
       <div className="topic">
-        <p>Seller Orders</p>
+        <p>Seller Orders (Orders to Me)</p>
       </div>
       <div className="orders-wrapper">
         <div className="orders-container">
-          {sellerOrdersToDisplay.map((order) => {
-            // Safe check for deliveryman data
-            const hasDeliverymanInfo = order.deliverymanId && typeof order.deliverymanId === 'object';
-            const deliverymanName = hasDeliverymanInfo 
-              ? `${order.deliverymanId.fname || ''} ${order.deliverymanId.lname || ''}`.trim() 
-              : 'Assigned';
-            
-            return (
-              <div key={order._id} className="order-item1">
-                <img 
-                  src={getImageUrl(order.productImage)} 
-                  alt={order.item} 
-                  className="order-image" 
-                  onError={(e) => {
-                    e.target.onerror = null; 
-                    e.target.src = 'https://via.placeholder.com/150?text=No+Image';
-                  }} 
-                />
-                <p><strong>{order.item}</strong></p>
-                <p>Quantity: {order.quantity}</p>
-                <p>Price: Rs.{order.price}</p>
-                <p>
-                  Status: <b style={{color: getStatusColor(order.status)}}>
-                    {order.status?.toUpperCase() || "PENDING"}
-                  </b>
-                </p>
-                
-                {/* Delivery info - only show if deliveryman accepted AND order is approved */}
-                {order.acceptedByDeliveryman && order.status === "approved" && (
-                  <div className="delivery-info">
-                    <p className="deliveryman-info">
-                      <FontAwesomeIcon icon={faTruck} /> 
-                      Deliveryman: <strong>{deliverymanName}</strong>
-                    </p>
-                    
-                    {/* Display Deliveryman ID */}
-                    <p className="deliveryman-detail">
-                      ID: <strong>{hasDeliverymanInfo ? order.deliverymanId._id : order.deliverymanId}</strong>
-                    </p>
-                    
-                    {hasDeliverymanInfo && (
-                      <>
-                        {order.deliverymanId.email && (
-                          <p className="deliveryman-detail">Email: {order.deliverymanId.email}</p>
-                        )}
-                        {order.deliverymanId.mobile && (
-                          <p className="deliveryman-detail">Mobile: {order.deliverymanId.mobile}</p>
-                        )}
-                      </>
-                    )}
-                    
-                    {/* Delivery status badge */}
-                    {getDeliveryStatusBadge(order.deliveryStatus)}
-                  </div>
-                )}
-                
-                {/* Action buttons - show based on order status */}
-                {order.status !== "approved" && order.status !== "disapproved" && !order.acceptedByDeliveryman && (
-                  <div className="order-buttons">
-                    <button 
-                      onClick={() => handleOrderStatus(order._id, "approved")}
-                    >
-                      <FontAwesomeIcon icon={faThumbsUp}/> Approve
-                    </button>
-                    <button 
-                      onClick={() => handleOrderStatus(order._id, "disapproved")}
-                    >
-                      <FontAwesomeIcon icon={faThumbsDown}/> Disapprove
-                    </button>
-                  </div>
-                )}
-                
-                {/* Show action buttons for orders accepted by deliveryman but not yet farmer-approved */}
-                {order.acceptedByDeliveryman && order.status !== "approved" && order.status !== "disapproved" && (
-                  <div className="order-buttons">
-                    <button 
-                      onClick={() => handleOrderStatus(order._id, "approved")}
-                    >
-                      <FontAwesomeIcon icon={faThumbsUp}/> Approve
-                    </button>
-                    <button 
-                      onClick={() => handleOrderStatus(order._id, "disapproved")}
-                    >
-                      <FontAwesomeIcon icon={faThumbsDown}/> Disapprove
-                    </button>
-                  </div>
-                )}
-                
-                {/* Show success message only if approved */}
-                {order.status === "approved" && order.acceptedByDeliveryman && (
-                  <div className="order-status-message">
-                    <p>✓ Order accepted by deliveryman</p>
-                  </div>
-                )}
-                
-                {/* Show disapproved message */}
-                {order.status === "disapproved" && (
-                  <div className="order-status-message-disapproved">
-                    <p>✗ Order Disapproved</p>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+          {sellerOrdersToDisplay.length === 0 ? (
+            <p>No seller orders found.</p>
+          ) : (
+            sellerOrdersToDisplay.map((order) => {
+              const hasDeliverymanInfo = order.deliverymanId && typeof order.deliverymanId === 'object';
+              const deliverymanName = hasDeliverymanInfo 
+                ? `${order.deliverymanId.fname || ''} ${order.deliverymanId.lname || ''}`.trim() 
+                : 'Assigned';
+              
+              return (
+                <div key={order._id} className="order-item1">
+                  <img 
+                    src={getImageUrl(order.productImage)} 
+                    alt={order.item} 
+                    className="order-image" 
+                    onError={(e) => {
+                      e.target.onerror = null; 
+                      e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                    }} 
+                  />
+                  <p><strong>{order.item}</strong></p>
+                  <p>Quantity: {order.quantity}</p>
+                  <p>Price: Rs.{order.price}</p>
+                  <p>
+                    Status: <b style={{color: getStatusColor(order.status)}}>
+                      {order.status?.toUpperCase() || "PENDING"}
+                    </b>
+                  </p>
+                  
+                  {order.acceptedByDeliveryman && order.status === "approved" && (
+                    <div className="delivery-info">
+                      <p className="deliveryman-info">
+                        <FontAwesomeIcon icon={faTruck} /> 
+                        Deliveryman: <strong>{deliverymanName}</strong>
+                      </p>
+                      
+                      <p className="deliveryman-detail">
+                        ID: <strong>{hasDeliverymanInfo ? order.deliverymanId._id : order.deliverymanId}</strong>
+                      </p>
+                      
+                      {hasDeliverymanInfo && (
+                        <>
+                          {order.deliverymanId.email && (
+                            <p className="deliveryman-detail">Email: {order.deliverymanId.email}</p>
+                          )}
+                          {order.deliverymanId.mobile && (
+                            <p className="deliveryman-detail">Mobile: {order.deliverymanId.mobile}</p>
+                          )}
+                        </>
+                      )}
+                      
+                      {getDeliveryStatusBadge(order.deliveryStatus)}
+                    </div>
+                  )}
+                  
+                  {order.status !== "approved" && order.status !== "disapproved" && !order.acceptedByDeliveryman && (
+                    <div className="order-buttons">
+                      <button 
+                        onClick={() => handleOrderStatus(order._id, "approved")}
+                      >
+                        <FontAwesomeIcon icon={faThumbsUp}/> Approve
+                      </button>
+                      <button 
+                        onClick={() => handleOrderStatus(order._id, "disapproved")}
+                      >
+                        <FontAwesomeIcon icon={faThumbsDown}/> Disapprove
+                      </button>
+                    </div>
+                  )}
+                  
+                  {order.acceptedByDeliveryman && order.status !== "approved" && order.status !== "disapproved" && (
+                    <div className="order-buttons">
+                      <button 
+                        onClick={() => handleOrderStatus(order._id, "approved")}
+                      >
+                        <FontAwesomeIcon icon={faThumbsUp}/> Approve
+                      </button>
+                      <button 
+                        onClick={() => handleOrderStatus(order._id, "disapproved")}
+                      >
+                        <FontAwesomeIcon icon={faThumbsDown}/> Disapprove
+                      </button>
+                    </div>
+                  )}
+                  
+                  {order.status === "approved" && order.acceptedByDeliveryman && (
+                    <div className="order-status-message">
+                      <p>✓ Order accepted by deliveryman</p>
+                    </div>
+                  )}
+                  
+                  {order.status === "disapproved" && (
+                    <div className="order-status-message-disapproved">
+                      <p>✗ Order Disapproved</p>
+                    </div>
+                  )}
+                </div>
+              );
+            })
+          )}
         </div>
         {sellerOrders.length > 4 && (
           <button 
@@ -393,86 +787,6 @@ function FarmerPage() {
             onClick={() => setShowAllSellerOrders(prev => !prev)}
           >
             {showAllSellerOrders ? "Show Less" : `View All (${sellerOrders.length})`} 
-            <FontAwesomeIcon icon={faChevronRight}/>
-          </button>
-        )}
-      </div>
-
-      {/* Farmer Orders */}
-      <div className="topic">
-        <p>Farmer Orders</p>
-      </div>
-      <div className="orders-wrapper">
-        <div className="orders-container">
-          {farmerOrdersToDisplay.map((order) => (
-            <div key={order._id} className="order-item1">
-              <img 
-                src={getImageUrl(order.productImage)} 
-                alt={order.item} 
-                className="order-image" 
-                onError={(e) => {
-                  e.target.onerror = null; 
-                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
-                }} 
-              />
-              <p><strong>{order.item}</strong></p>
-              <p>Quantity: {order.quantity}</p>
-              <p>Price: Rs.{order.price}</p>
-              <button className="cart-button">
-                <FontAwesomeIcon icon={faShoppingCart}/> Add to Cart
-              </button>
-              <button className="supply-button">
-                <FontAwesomeIcon icon={faShoppingBag}/> Buy Now
-              </button>
-            </div>
-          ))}
-        </div>
-        {farmerOrders.length > 4 && (
-          <button 
-            className="view-all-button1" 
-            onClick={() => setShowAllFarmerOrders(prev => !prev)}
-          >
-            {showAllFarmerOrders ? "Show Less" : `View All (${farmerOrders.length})`} 
-            <FontAwesomeIcon icon={faChevronRight}/>
-          </button>
-        )}
-      </div>
-
-      {/* Delivery Services */}
-      <div className="topic">
-        <p>Delivery Services</p>
-      </div>
-      <div className="orders-wrapper">
-        <div className="orders-container">
-          {deliveryPostsToDisplay.map((order) => (
-            <div key={order._id} className="order-item1">
-              <img 
-                src={getImageUrl(order.vehicleImage)} 
-                alt={order.model} 
-                className="order-image" 
-                onError={(e) => {
-                  e.target.onerror = null; 
-                  e.target.src = 'https://via.placeholder.com/150?text=No+Image';
-                }} 
-              />
-              <p><strong>{order.model}</strong></p>
-              <p>Capacity: {order.capacity} kg</p>
-              <p>Price: Rs.{order.price}/km</p>
-              <button className="cart-button">
-                <FontAwesomeIcon icon={faShoppingCart}/> Add to Cart
-              </button>
-              <button className="supply-button">
-                <FontAwesomeIcon icon={faInfoCircle}/> More Details
-              </button>
-            </div>
-          ))}
-        </div>
-        {deliveryPosts.length > 4 && (
-          <button 
-            className="view-all-button1" 
-            onClick={() => setShowAllDeliveryPosts(prev => !prev)}
-          >
-            {showAllDeliveryPosts ? "Show Less" : `View All (${deliveryPosts.length})`} 
             <FontAwesomeIcon icon={faChevronRight}/>
           </button>
         )}

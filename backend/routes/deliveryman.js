@@ -175,4 +175,53 @@ router.route("/get/:id").get(async (req, res) => {
     });
 });
 
+// ✅ POST /deliveryman/userdata - Get deliveryman data from token
+router.post("/userdata", async (req, res) => {
+  try {
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ status: "error", message: "Token is required" });
+    }
+    
+    // Verify and decode token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    
+    // Find deliveryman by email or ID from token
+    const deliveryman = await Deliveryman.findOne({ 
+      $or: [
+        { email: decoded.email },
+        { _id: decoded.id || decoded.userId || decoded._id }
+      ]
+    }).select('-password'); // Exclude password
+    
+    if (!deliveryman) {
+      return res.status(404).json({ status: "error", message: "Deliveryman not found" });
+    }
+    
+    console.log("✅ Deliveryman data fetched:", deliveryman._id, deliveryman.email);
+    
+    res.json({ 
+      status: "ok", 
+      data: deliveryman 
+    });
+    
+  } catch (error) {
+    console.error("❌ Error fetching deliveryman data:", error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ status: "error", message: "Invalid token" });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ status: "error", message: "Token expired" });
+    }
+    
+    res.status(500).json({ 
+      status: "error", 
+      message: "Failed to fetch deliveryman data",
+      error: error.message 
+    });
+  }
+});
+
 module.exports = router;

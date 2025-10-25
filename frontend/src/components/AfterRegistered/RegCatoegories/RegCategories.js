@@ -1,3 +1,4 @@
+
 import React from "react";
 import { Link } from "react-router-dom";
 import "./RegCategories.css";
@@ -5,40 +6,23 @@ import "./RegCategories.css";
 function Categories() {
   return (
     <div>
-      <div className="image-row">
+      <div className="image-row" style={{
+        display: 'flex',
+        justifyContent: 'center',
+        alignItems: 'center',
+        padding: '20px'
+      }}>
         <Link to="/regvegetable">
           <img
             src={process.env.PUBLIC_URL + "/Categories/veg.png"}
             alt="Vegetable"
             className="image"
-          />
-        </Link>
-        <Link to="/regfruit">
-          <img
-            src={process.env.PUBLIC_URL + "/Categories/fruit.png"}
-            alt="Fruit"
-            className="image"
-          />
-        </Link>
-        <Link to="/reggrain">
-          <img
-            src={process.env.PUBLIC_URL + "/Categories/grain.png"}
-            alt="Grain"
-            className="image"
-          />
-        </Link>
-        <Link to="/regspices">
-          <img
-            src={process.env.PUBLIC_URL + "/Categories/spices.png"}
-            alt="Spices"
-            className="image"
-          />
-        </Link>
-        <Link to="/regother">
-          <img
-            src={process.env.PUBLIC_URL + "/Categories/other.png"}
-            alt="Other"
-            className="image"
+            style={{
+              transition: 'transform 0.3s ease',
+              cursor: 'pointer'
+            }}
+            onMouseOver={(e) => e.currentTarget.style.transform = 'scale(1.1)'}
+            onMouseOut={(e) => e.currentTarget.style.transform = 'scale(1)'}
           />
         </Link>
       </div>

@@ -3,8 +3,8 @@ import { useNavigate } from "react-router-dom";
 
 function UserProfile() {
   const [user, setUser] = useState(null);
-  const [orders, setOrders] = useState([]);
   const [error, setError] = useState("");
+  const [salary, setSalary] = useState(0);
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -17,8 +17,31 @@ function UserProfile() {
       .then((res) => res.json())
       .then((data) => {
         if (data.status === "ok") {
-          setUser(data.data);
-          fetchOrders(data.data.role, data.data._id);
+          const userRole = data.data.role || data.data.userRole;
+
+          // Fetch deliveryman details if role is Deliveryman
+          if (userRole === "Deliveryman") {
+            fetch("http://localhost:8070/deliveryman/userdata", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token: localStorage.getItem("token") }),
+            })
+              .then((res) => res.json())
+              .then((deliverymanData) => {
+                if (deliverymanData.status === "ok" && deliverymanData.data) {
+                  setUser({ ...data.data, ...deliverymanData.data });
+                  setSalary(deliverymanData.data.salary || 0);
+                } else {
+                  setUser(data.data);
+                }
+              })
+              .catch((err) => {
+                console.error("Failed to fetch deliveryman details:", err);
+                setUser(data.data);
+              });
+          } else {
+            setUser(data.data);
+          }
         } else {
           setError("Please login again.");
         }
@@ -29,26 +52,14 @@ function UserProfile() {
       });
   }, []);
 
-  const fetchOrders = (role, id) => {
-    let url = "";
-    if (role === "Farmer") url = `http://localhost:8070/farmerorder/user/${id}`;
-    else if (role === "Seller") url = `http://localhost:8070/sellerorder/user/${id}`;
-    else if (role === "Deliveryman") url = `http://localhost:8070/deliverypost/user/${id}`;
-    else return;
-
-    fetch(url)
-      .then((res) => res.json())
-      .then((data) => setOrders(data))
-      .catch((err) => console.error("Failed to fetch orders:", err));
-  };
-
-  const handleLogout = () => {
-    localStorage.removeItem("token"); // remove token
-    navigate("/"); // redirect to home page
+  const handleBack = () => {
+    navigate(-1); // Go back to previous page
   };
 
   if (error) return <p>{error}</p>;
   if (!user) return <p>Loading user data...</p>;
+
+  const userRole = user.role || user.userRole;
 
   return (
     <>
@@ -64,37 +75,32 @@ function UserProfile() {
           display: flex;
           flex-direction: column;
           align-items: center;
-          justify-content: flex-start;
-          padding: 80px 20px 40px 20px;
+          justify-content: center;
+          padding: 20px;
           min-height: 100vh;
           color: #2e5230;
           box-sizing: border-box;
+          position: relative;
         }
 
         h2 {
           font-size: 36px;
           font-weight: 700;
           margin-bottom: 10px;
+          color: #2e5230;
         }
 
         p {
           font-size: 18px;
-          margin: 6px 0;
+          margin: 10px 0;
           text-align: center;
         }
 
-        hr {
-          border: none;
-          height: 2px;
-          background-color: #79ac78;
-          margin: 30px 0;
-          border-radius: 5px;
-          width: 80%;
-        }
-
-        .button {
-          padding: 12px 25px;
-          margin: 10px;
+        .back-button {
+          position: fixed;
+          bottom: 30px;
+          right: 30px;
+          padding: 12px 30px;
           background-color: #3b6e3b;
           color: white;
           font-weight: 600;
@@ -103,59 +109,53 @@ function UserProfile() {
           cursor: pointer;
           transition: all 0.3s ease;
           box-shadow: 0 4px 10px rgba(0,0,0,0.2);
+          font-size: 16px;
+          z-index: 1000;
         }
 
-        .button:hover {
+        .back-button:hover {
           background-color: #2e5230;
           transform: scale(1.05);
         }
 
-        .orders-wrapper {
-          display: grid;
-          grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-          gap: 25px;
-          justify-items: center;
-          width: 100%;
-          max-width: 1200px;
-        }
-
-        .order-item {
-          background-color: #e3f4e3;
-          border: 1px solid #79ac78;
-          border-radius: 15px;
-          padding: 20px;
-          box-shadow: 0 8px 20px rgba(0, 0, 0, 0.1);
-          transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
-        }
-
-        .order-item:hover {
-          transform: translateY(-8px);
-          box-shadow: 0 12px 25px rgba(0, 0, 0, 0.15);
-        }
-
-        .order-item pre {
-          font-family: 'Courier New', Courier, monospace;
-          background-color: #d5ead5;
-          padding: 10px;
-          border-radius: 8px;
-          overflow-x: auto;
-        }
-
         .profile-card {
-          background-color: #d9f0d9;
-          border-radius: 15px;
-          padding: 30px;
-          margin-bottom: 40px;
-          box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+          background-color: #ffffff;
+          border-radius: 20px;
+          padding: 40px 50px;
+          box-shadow: 0 10px 30px rgba(0,0,0,0.15);
           text-align: center;
           transition: transform 0.3s ease-in-out, box-shadow 0.3s ease-in-out;
           width: 100%;
-          max-width: 600px;
+          max-width: 500px;
         }
 
         .profile-card:hover {
           transform: translateY(-5px);
-          box-shadow: 0 15px 35px rgba(0,0,0,0.15);
+          box-shadow: 0 15px 40px rgba(0,0,0,0.2);
+        }
+
+        .salary-highlight {
+          background: linear-gradient(135deg, #fff3cd 0%, #ffe69c 100%);
+          border: 2px solid #ffc107;
+          padding: 20px;
+          border-radius: 15px;
+          margin: 20px 0;
+          font-size: 24px;
+          font-weight: 700;
+          color: #856404;
+          box-shadow: 0 4px 15px rgba(255, 193, 7, 0.3);
+        }
+
+        .no-salary {
+          background: linear-gradient(135deg, #f8d7da 0%, #f5c6cb 100%);
+          border: 2px solid #f44336;
+          padding: 20px;
+          border-radius: 15px;
+          margin: 20px 0;
+          font-size: 24px;
+          font-weight: 700;
+          color: #721c24;
+          box-shadow: 0 4px 15px rgba(244, 67, 54, 0.3);
         }
 
         html {
@@ -165,28 +165,22 @@ function UserProfile() {
 
       <div className="container">
         <div className="profile-card">
-          <h2>Welcome, {user.username}</h2>
-          <p><strong>Email:</strong> {user.email}</p>
-          <p><strong>Salary:</strong> ${user.salary || 0}</p>
-          <button className="button" onClick={handleLogout}>
-            Logout
-          </button>
+          <h2>👤 User Profile</h2>
+
+          {userRole === "Deliveryman" ? (
+            <div className="salary-highlight">
+              💰 Salary: Rs.{salary}
+            </div>
+          ) : (userRole === "Seller" || userRole === "Farmer") ? (
+            <div className="no-salary">
+              🚫 No Salary
+            </div>
+          ) : null}
         </div>
 
-        <hr />
-
-        <h3>Your Orders:</h3>
-        {orders.length === 0 ? (
-          <p>No orders found.</p>
-        ) : (
-          <div className="orders-wrapper">
-            {orders.map((order, index) => (
-              <div key={order._id || index} className="order-item">
-                <pre>{JSON.stringify(order, null, 2)}</pre>
-              </div>
-            ))}
-          </div>
-        )}
+        <button className="back-button" onClick={handleBack}>
+          ← Back
+        </button>
       </div>
     </>
   );

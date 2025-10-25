@@ -28,6 +28,14 @@ function GovernmentPage() {
   const [applicants, setApplicants] = useState([]);
   const [showApplicantsFor, setShowApplicantsFor] = useState(null);
 
+  // Delivery history states
+  const [selectedDeliverymanId, setSelectedDeliverymanId] = useState(null);
+  const [deliveryHistory, setDeliveryHistory] = useState([]);
+  const [monthlyStats, setMonthlyStats] = useState({});
+  const [showHistory, setShowHistory] = useState(false);
+
+  const BASE_URL = "http://localhost:8070";
+
   // Fetch schemes on mount but only if logged in
   useEffect(() => {
     if (loggedIn) {
@@ -38,7 +46,7 @@ function GovernmentPage() {
   // Fetch schemes from backend
   const fetchSchemes = async () => {
     try {
-      const res = await axios.get("http://localhost:8070/schemes");
+      const res = await axios.get(`${BASE_URL}/schemes`);
       setSchemes(res.data);
     } catch (err) {
       console.error("Failed to fetch schemes:", err);
@@ -49,12 +57,80 @@ function GovernmentPage() {
   // Fetch delivery men from backend
   const fetchDeliveryMen = async () => {
     try {
-      const res = await axios.get("http://localhost:8070/deliverymen");
+      const res = await axios.get(`${BASE_URL}/deliverymen`);
       setDeliveryMen(res.data);
     } catch (err) {
       console.error("Failed to fetch delivery men:", err);
       alert("Failed to load delivery men. Please try again later.");
     }
+  };
+
+  // Fetch delivery history for a specific deliveryman
+  const fetchDeliveryHistory = async (deliverymanId) => {
+    try {
+      // Fetch seller orders
+      const sellerOrdersRes = await axios.get(`${BASE_URL}/sellerorder/deliveryman/${deliverymanId}`);
+      const sellerOrders = Array.isArray(sellerOrdersRes.data) ? sellerOrdersRes.data : [];
+
+      // Fetch farmer orders
+      let farmerOrders = [];
+      try {
+        const farmerOrdersRes = await axios.get(`${BASE_URL}/farmerorder/deliveryman/${deliverymanId}`);
+        farmerOrders = Array.isArray(farmerOrdersRes.data) ? farmerOrdersRes.data : [];
+      } catch (err) {
+        console.log("No farmer orders found");
+      }
+
+      // Combine and filter delivered orders only
+      const allOrders = [...sellerOrders, ...farmerOrders].filter(
+        order => order.deliveryStatus === "delivered" || order.deliveryStatus === "approved"
+      );
+
+      // Sort by date (newest first)
+      allOrders.sort((a, b) => {
+        const dateA = new Date(a.updatedAt || a.createdAt || 0);
+        const dateB = new Date(b.updatedAt || b.createdAt || 0);
+        return dateB - dateA;
+      });
+
+      setDeliveryHistory(allOrders);
+      calculateMonthlyStats(allOrders);
+      setSelectedDeliverymanId(deliverymanId);
+      setShowHistory(true);
+    } catch (err) {
+      console.error("Failed to fetch delivery history:", err);
+      alert("Failed to fetch delivery history. Please try again.");
+    }
+  };
+
+  // Calculate monthly statistics
+  const calculateMonthlyStats = (orders) => {
+    const stats = {};
+    
+    orders.forEach(order => {
+      const date = new Date(order.updatedAt || order.createdAt);
+      const monthYear = `${date.toLocaleString('default', { month: 'long' })} ${date.getFullYear()}`;
+      
+      if (!stats[monthYear]) {
+        stats[monthYear] = 0;
+      }
+      stats[monthYear]++;
+    });
+
+    setMonthlyStats(stats);
+  };
+
+  // Format date
+  const formatDate = (dateString) => {
+    if (!dateString) return "Date not available";
+    const date = new Date(dateString);
+    return date.toLocaleDateString('en-US', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
   };
 
   // Add new scheme
@@ -64,7 +140,7 @@ function GovernmentPage() {
       return;
     }
     try {
-      const res = await axios.post("http://localhost:8070/schemes", {
+      const res = await axios.post(`${BASE_URL}/schemes`, {
         name: newScheme.trim(),
       });
       setSchemes((prev) => [...prev, res.data]);
@@ -88,7 +164,7 @@ function GovernmentPage() {
     }
     const scheme = schemes[index];
     try {
-      const res = await axios.put(`http://localhost:8070/schemes/${scheme._id}`, {
+      const res = await axios.put(`${BASE_URL}/schemes/${scheme._id}`, {
         name: editScheme.trim(),
       });
       const updatedSchemes = [...schemes];
@@ -105,7 +181,7 @@ function GovernmentPage() {
   const handleDeleteScheme = async (index) => {
     const scheme = schemes[index];
     try {
-      await axios.delete(`http://localhost:8070/schemes/${scheme._id}`);
+      await axios.delete(`${BASE_URL}/schemes/${scheme._id}`);
       setSchemes((prev) => prev.filter((_, i) => i !== index));
     } catch (err) {
       console.error("Error deleting scheme:", err);
@@ -133,7 +209,7 @@ function GovernmentPage() {
     }
 
     try {
-      await axios.put(`http://localhost:8070/deliverymen/${id}/salary`, {
+      await axios.put(`${BASE_URL}/deliverymen/${id}/salary`, {
         salary: numericSalary,
       });
       alert("Salary updated successfully!");
@@ -147,7 +223,7 @@ function GovernmentPage() {
   // Fetch applicants for a scheme
   const fetchApplicants = async (schemeId) => {
     try {
-      const res = await axios.get(`http://localhost:8070/schemes/${schemeId}/applicants`);
+      const res = await axios.get(`${BASE_URL}/schemes/${schemeId}/applicants`);
       setApplicants(res.data);
       setShowApplicantsFor(schemeId);
     } catch (err) {
@@ -178,6 +254,9 @@ function GovernmentPage() {
     setSalaryInputs({});
     setApplicants([]);
     setShowApplicantsFor(null);
+    setShowHistory(false);
+    setDeliveryHistory([]);
+    setSelectedDeliverymanId(null);
   };
 
   return (
@@ -409,6 +488,7 @@ function GovernmentPage() {
                   <th>Current Salary</th>
                   <th>Set New Salary</th>
                   <th>Action</th>
+                  <th>View History</th>
                 </tr>
               </thead>
               <tbody>
@@ -430,17 +510,225 @@ function GovernmentPage() {
                     <td>
                       <button onClick={() => provideSalary(dm._id)}>Provide Salary</button>
                     </td>
+                    <td>
+                      <button 
+                        onClick={() => fetchDeliveryHistory(dm._id)}
+                        style={{
+                          padding: "5px 10px",
+                          backgroundColor: "#4CAF50",
+                          color: "white",
+                          border: "none",
+                          borderRadius: "4px",
+                          cursor: "pointer"
+                        }}
+                      >
+                        View History
+                      </button>
+                    </td>
                   </tr>
                 ))}
                 {deliveryMen.length === 0 && (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: "center" }}>
+                    <td colSpan="7" style={{ textAlign: "center" }}>
                       No delivery men found.
                     </td>
                   </tr>
                 )}
               </tbody>
             </table>
+          )}
+
+          {/* Delivery History Section */}
+          {showHistory && (
+            <div style={{
+              margin: "30px auto",
+              maxWidth: "1400px",
+              padding: "30px",
+              backgroundColor: "#f5f5f5",
+              borderRadius: "10px",
+              boxShadow: "0 4px 8px rgba(0,0,0,0.1)"
+            }}>
+              <div style={{ 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center",
+                marginBottom: "20px"
+              }}>
+                <h2 style={{ margin: 0, color: "#333" }}>
+                  Delivery History - {deliveryMen.find(dm => dm._id === selectedDeliverymanId)?.fname} {deliveryMen.find(dm => dm._id === selectedDeliverymanId)?.lname}
+                </h2>
+                <button 
+                  onClick={() => setShowHistory(false)}
+                  style={{
+                    padding: "8px 15px",
+                    backgroundColor: "#f44336",
+                    color: "white",
+                    border: "none",
+                    borderRadius: "4px",
+                    cursor: "pointer"
+                  }}
+                >
+                  Close
+                </button>
+              </div>
+
+              {/* Monthly Statistics */}
+              <div style={{
+                backgroundColor: "white",
+                padding: "20px",
+                borderRadius: "8px",
+                marginBottom: "20px",
+                boxShadow: "0 2px 4px rgba(0,0,0,0.1)"
+              }}>
+                <h3 style={{ marginTop: 0, color: "#333" }}>Monthly Delivery Statistics</h3>
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: "15px" }}>
+                  {Object.entries(monthlyStats).map(([month, count]) => (
+                    <div key={month} style={{
+                      padding: "15px",
+                      backgroundColor: "#e3f2fd",
+                      borderRadius: "5px",
+                      textAlign: "center",
+                      borderLeft: "4px solid #2196f3"
+                    }}>
+                      <div style={{ fontSize: "14px", color: "#666", marginBottom: "5px" }}>{month}</div>
+                      <div style={{ fontSize: "24px", fontWeight: "bold", color: "#2196f3" }}>{count} deliveries</div>
+                    </div>
+                  ))}
+                </div>
+                {Object.keys(monthlyStats).length === 0 && (
+                  <p style={{ textAlign: "center", color: "#666" }}>No delivery statistics available</p>
+                )}
+              </div>
+
+              {/* Detailed Delivery History */}
+              <div>
+                <h3 style={{ color: "#333" }}>Detailed Delivery History ({deliveryHistory.length} total deliveries)</h3>
+                {deliveryHistory.length === 0 ? (
+                  <p style={{ textAlign: "center", padding: "40px", fontSize: "16px", color: "#666" }}>
+                    No delivery history found for this deliveryman.
+                  </p>
+                ) : (
+                  <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
+                    {deliveryHistory.map((order) => {
+                      const hasFarmerInfo = order.farmerId && typeof order.farmerId === 'object';
+                      const farmerName = hasFarmerInfo 
+                        ? `${order.farmerId.fname || ''} ${order.farmerId.lname || ''}`.trim() || 'Unknown Farmer'
+                        : 'Unknown Farmer';
+
+                      const hasSellerInfo = order.sellerId && typeof order.sellerId === 'object';
+                      const sellerName = hasSellerInfo 
+                        ? `${order.sellerId.fname || ''} ${order.sellerId.lname || ''}`.trim() || 'Unknown Seller'
+                        : 'Unknown Seller';
+
+                      return (
+                        <div 
+                          key={order._id}
+                          style={{
+                            backgroundColor: "white",
+                            borderRadius: "8px",
+                            padding: "20px",
+                            boxShadow: "0 2px 4px rgba(0,0,0,0.1)",
+                            display: "grid",
+                            gridTemplateColumns: "150px 1fr",
+                            gap: "20px"
+                          }}
+                        >
+                          <img 
+                            src={`${BASE_URL}${order.productImage}`}
+                            alt={order.item}
+                            style={{
+                              width: "100%",
+                              height: "150px",
+                              objectFit: "cover",
+                              borderRadius: "8px"
+                            }}
+                            onError={(e) => {
+                              e.target.onerror = null;
+                              e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                            }}
+                          />
+                          <div>
+                            <h4 style={{ margin: "0 0 15px 0", color: "#333" }}>{order.item}</h4>
+                            
+                            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: "10px", marginBottom: "15px" }}>
+                              <div>
+                                <strong>Quantity:</strong> {order.quantity} kg
+                              </div>
+                              <div>
+                                <strong>Price:</strong> Rs.{order.price}
+                              </div>
+                              <div>
+                                <strong>Status:</strong> <span style={{ color: "green", fontWeight: "bold" }}>✓ DELIVERED</span>
+                              </div>
+                              <div>
+                                <strong>Delivery Date:</strong> {formatDate(order.updatedAt || order.createdAt)}
+                              </div>
+                              {order.district && (
+                                <div>
+                                  <strong>District:</strong> {order.district}
+                                </div>
+                              )}
+                            </div>
+
+                            {/* Delivery Route */}
+                            <div style={{
+                              padding: "15px",
+                              backgroundColor: "#e8f5e9",
+                              borderRadius: "5px",
+                              borderLeft: "4px solid #4caf50"
+                            }}>
+                              <div style={{ display: "flex", alignItems: "center", gap: "20px", flexWrap: "wrap" }}>
+                                <div style={{ flex: 1, minWidth: "200px" }}>
+                                  <div style={{ fontSize: "12px", color: "#666", marginBottom: "5px" }}>
+                                    <strong>FROM (Farmer):</strong>
+                                  </div>
+                                  <div style={{ fontSize: "16px", color: "#333", fontWeight: "bold" }}>
+                                    👨‍🌾 {farmerName}
+                                  </div>
+                                  {hasFarmerInfo && order.farmerId.mobile && (
+                                    <div style={{ fontSize: "14px", color: "#666", marginTop: "3px" }}>
+                                      📞 {order.farmerId.mobile}
+                                    </div>
+                                  )}
+                                  {hasFarmerInfo && order.farmerId.district && (
+                                    <div style={{ fontSize: "14px", color: "#666", marginTop: "3px" }}>
+                                      📍 {order.farmerId.district}
+                                    </div>
+                                  )}
+                                </div>
+
+                                <div style={{ fontSize: "24px", color: "#4caf50" }}>
+                                  🚚 ➔
+                                </div>
+
+                                <div style={{ flex: 1, minWidth: "200px" }}>
+                                  <div style={{ fontSize: "12px", color: "#666", marginBottom: "5px" }}>
+                                    <strong>TO (Seller):</strong>
+                                  </div>
+                                  <div style={{ fontSize: "16px", color: "#333", fontWeight: "bold" }}>
+                                    🏪 {sellerName}
+                                  </div>
+                                  {hasSellerInfo && order.sellerId.mobile && (
+                                    <div style={{ fontSize: "14px", color: "#666", marginTop: "3px" }}>
+                                      📞 {order.sellerId.mobile}
+                                    </div>
+                                  )}
+                                  {hasSellerInfo && order.sellerId.district && (
+                                    <div style={{ fontSize: "14px", color: "#666", marginTop: "3px" }}>
+                                      📍 {order.sellerId.district}
+                                    </div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
           )}
 
           <FooterNew />

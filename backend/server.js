@@ -1,3 +1,4 @@
+
 // server.js
 const express = require("express");
 const mongoose = require("mongoose");
@@ -7,7 +8,6 @@ const dotenv = require("dotenv");
 const path = require("path");
 const multer = require("multer");
 const fs = require("fs");
-const deliverymenAuthRouter = require("./routes/deliverymenAuth");
 
 dotenv.config();
 
@@ -51,221 +51,53 @@ mongoose
   .then(() => console.log("✅ MongoDB connected"))
   .catch((err) => console.error("❌ MongoDB connection error:", err));
 
-// -------------------- MULTER SETUP --------------------
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => {
-    cb(null, uploadsDir);
-  },
-  filename: (req, file, cb) => {
-    // Keep original extension (.jpg, .png, .webp etc)
-    const ext = path.extname(file.originalname);
-    const uniqueName = Date.now() + "-" + file.originalname.replace(/\s+/g, '-');
-    cb(null, uniqueName);
-  },
-});
-
-// ✅ Add file filter for images only
-const fileFilter = (req, file, cb) => {
-  const allowedTypes = /jpeg|jpg|png|gif|webp/;
-  const extname = allowedTypes.test(path.extname(file.originalname).toLowerCase());
-  const mimetype = allowedTypes.test(file.mimetype);
-
-  if (mimetype && extname) {
-    return cb(null, true);
-  } else {
-    cb(new Error("Only image files are allowed (jpeg, jpg, png, gif, webp)"));
-  }
-};
-
-const upload = multer({ 
-  storage,
-  fileFilter,
-  limits: { fileSize: 5 * 1024 * 1024 } // 5MB limit
-});
-
-// -------------------- ROUTERS --------------------
+// -------------------- IMPORT ROUTERS --------------------
 const farmerRouter = require("./routes/farmers");
 const sellerRouter = require("./routes/sellers");
 const deliverymanRouter = require("./routes/deliveryman");
-const productRouter = require("./routes/products");
+const productRouter = require("./routes/products"); // ✅ This has farmerId support
 const farmerProductRouter = require("./routes/farmerProducts");
-const sellerOrderRouter = require("./routes/sellerOrders");
+const sellerOrderRouter = require("./routes/sellerOrders"); // ✅ This has farmerId support
 const farmerOrderRouter = require("./routes/farmerOrders");
 const deliveryPostRouter = require("./routes/deliveryposts");
 const schemesRouter = require("./routes/schemes");
 const userRouter = require("./routes/user");
 const deliverymenRouter = require("./routes/DeliveryMen");
 const authRouter = require("./routes/auth");
+const deliverymenAuthRouter = require("./routes/deliverymenAuth");
 const appliedSchemesRoutes = require("./routes/appliedSchemes");
-const sellerOrderRoutes = require("./routes/sellerOrderRoutes");
-const maleshRoutes = require('./routes/malesh'); // Adjust path as needed
-app.use('/sellerorder', maleshRoutes);
-app.use("/sellerorder", sellerOrderRoutes);
+const salaryRoutes = require('./routes/salary');
+app.use('/salary', salaryRoutes);
 
+// -------------------- REGISTER ROUTES --------------------
+// ✅ Register routes in correct order (most specific first)
 
-app.use("/appliedschemes", appliedSchemesRoutes);
-app.use("/sellerorder", require("./routes/sellerOrders"));
-app.use("/products", require("./routes/products"));
-
-app.use("/farmer", farmerRouter);
-app.use("/seller", sellerRouter);
-app.use("/deliveryman", deliverymanRouter);
-app.use("/product", productRouter);
-app.use("/farmerProducts", farmerProductRouter);
-app.use("/farmerorder", farmerOrderRouter);
-app.use("/deliverypost", deliveryPostRouter);
-app.use("/schemes", schemesRouter);
-app.use("/user", userRouter);
-app.use("/deliverymen", deliverymenRouter);
+// Authentication routes
 app.use("/auth", authRouter);
 app.use("/deliverymenAuth", deliverymenAuthRouter);
 
-// -------------------- PRODUCT ROUTES --------------------
-const Product = require("./model/Product");
+// User routes
+app.use("/farmer", farmerRouter);
+app.use("/seller", sellerRouter);
+app.use("/deliveryman", deliverymanRouter);
+app.use("/user", userRouter);
+app.use("/deliverymen", deliverymenRouter);
 
-// ✅ Get product by name
-app.get("/product/name/:productName", async (req, res) => {
-  try {
-    const productName = req.params.productName;
-    const product = await Product.findOne({ productName: productName });
-    
-    if (!product) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-    
-    res.json(product);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
+// ✅ Product routes - USE THE ROUTER, DON'T DEFINE ROUTES HERE
+app.use("/product", productRouter); // This handles all /product/* routes
+app.use("/farmerProducts", farmerProductRouter);
 
-// ✅ Add new product with image upload
-app.post("/product/add", upload.single("productImage"), async (req, res) => {
-  try {
-    const { productName, category, quantity, price } = req.body;
+// ✅ Order routes - USE THE ROUTER
+app.use("/sellerorder", sellerOrderRouter); // This handles all /sellerorder/* routes
+app.use("/farmerorder", farmerOrderRouter);
 
-    // ✅ Build DB path with forward slashes only
-    let productImage = "";
-    if (req.file && req.file.filename) {
-      productImage = `/uploads/${req.file.filename}`;
-    }
+// Other routes
+app.use("/deliverypost", deliveryPostRouter);
+app.use("/schemes", schemesRouter);
+app.use("/appliedschemes", appliedSchemesRoutes);
 
-    const newProduct = new Product({
-      productName,
-      category,
-      quantity: Number(quantity),
-      price: Number(price),
-      productImage,
-    });
-
-    const savedProduct = await newProduct.save();
-    console.log("✅ Product added with image:", productImage);
-    res.status(201).json(savedProduct);
-  } catch (err) {
-    console.error("❌ Error adding product:", err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ✅ Get all products
-app.get("/product", async (req, res) => {
-  try {
-    const products = await Product.find();
-    res.json(products);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// ✅ Get products by category
-app.get("/product/category/:category", async (req, res) => {
-  try {
-    const category = req.params.category;
-    const products = await Product.find({ category });
-    res.json(products);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-// ✅ Update product quantity and price
-app.patch("/product/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { quantity, price } = req.body;
-
-    const updatedProduct = await Product.findByIdAndUpdate(
-      id,
-      { quantity: Number(quantity), price: Number(price) },
-      { new: true }
-    );
-
-    if (!updatedProduct) return res.status(404).json({ message: "Product not found" });
-
-    res.json(updatedProduct);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ✅ Update product with image
-app.put("/product/:id", upload.single("productImage"), async (req, res) => {
-  try {
-    const { id } = req.params;
-    const { productName, category, quantity, price } = req.body;
-
-    const updateData = {
-      productName,
-      category,
-      quantity: Number(quantity),
-      price: Number(price),
-    };
-
-    // If new image is uploaded, update the image path
-    if (req.file && req.file.filename) {
-      updateData.productImage = `/uploads/${req.file.filename}`;
-    }
-
-    const updatedProduct = await Product.findByIdAndUpdate(id, updateData, { new: true });
-
-    if (!updatedProduct) return res.status(404).json({ message: "Product not found" });
-
-    res.json(updatedProduct);
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
-
-// ✅ Delete product
-app.delete("/product/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-    const deletedProduct = await Product.findByIdAndDelete(id);
-    
-    if (!deletedProduct) {
-      return res.status(404).json({ message: "Product not found" });
-    }
-
-    // ✅ Optional: Delete the image file from uploads folder
-    if (deletedProduct.productImage) {
-      const imagePath = path.join(__dirname, deletedProduct.productImage);
-      if (fs.existsSync(imagePath)) {
-        fs.unlinkSync(imagePath);
-        console.log("✅ Deleted image file:", imagePath);
-      }
-    }
-
-    res.json({ message: "Product deleted successfully", deletedProduct });
-  } catch (err) {
-    console.error(err);
-    res.status(500).json({ error: err.message });
-  }
-});
+// ✅ REMOVED: Duplicate product routes that were here
+// All product routes are now handled by productRouter
 
 // -------------------- HEALTH CHECK --------------------
 app.get("/", (req, res) => {
@@ -286,14 +118,16 @@ app.use((err, req, res, next) => {
     }
     return res.status(400).json({ error: err.message });
   } else if (err) {
+    console.error("Error:", err);
     return res.status(500).json({ error: err.message });
   }
   next();
 });
 
-// 404 handler
+// 404 handler - This should be LAST
 app.use((req, res) => {
-  res.status(404).json({ error: "Route not found" });
+  console.log("❌ 404 - Route not found:", req.method, req.url);
+  res.status(404).json({ error: "Route not found", path: req.url });
 });
 
 // -------------------- START SERVER --------------------
@@ -301,4 +135,12 @@ app.listen(PORT, () => {
   console.log(`🚀 Server running on http://localhost:${PORT}`);
   console.log(`📁 Uploads directory: ${uploadsDir}`);
   console.log(`🖼️  Static files served at: http://localhost:${PORT}/uploads`);
+  console.log(`\n📋 Available routes:`);
+  console.log(`   - POST   /product/add`);
+  console.log(`   - GET    /product/farmer/:farmerId/category/:category`);
+  console.log(`   - GET    /product/farmer/:farmerId`);
+  console.log(`   - GET    /product/name/:productName`);
+  console.log(`   - GET    /product/category/:category`);
+  console.log(`   - POST   /sellerorder/add`);
+  console.log(`   - GET    /sellerorder/farmer/:farmerId`);
 });

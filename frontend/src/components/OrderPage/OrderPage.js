@@ -23,10 +23,59 @@ function OrderPage() {
   const [availableQuantity, setAvailableQuantity] = useState(0);
   const [quantityError, setQuantityError] = useState("");
   const [productId, setProductId] = useState("");
+  const [farmerId, setFarmerId] = useState(""); // Farmer who owns the product
+  const [sellerId, setSellerId] = useState(""); // ✅ Add sellerId state (logged-in seller)
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const BASE_URL = "http://localhost:8070";
 
+  // ✅ STEP 1: Get logged-in seller's ID from token
+  useEffect(() => {
+    const fetchSellerData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        
+        if (!token) {
+          console.error("No token found - user not logged in");
+          alert("Please log in to place an order");
+          navigate("/login"); // Redirect to login if no token
+          return;
+        }
+
+        const res = await fetch(`${BASE_URL}/seller/userdata`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        });
+
+        const data = await res.json();
+        
+        if (data.status === "ok" && data.data) {
+          setSellerId(data.data._id);
+          console.log("✅ Logged-in Seller ID:", data.data._id);
+          
+          // Pre-fill form with seller's data
+          setFormData(prev => ({
+            ...prev,
+            email: data.data.email || prev.email,
+            district: data.data.district || prev.district,
+            mobile: data.data.mobile || prev.mobile,
+          }));
+        } else {
+          console.error("Failed to fetch seller data:", data);
+          alert("Failed to load user data. Please log in again.");
+          navigate("/login");
+        }
+      } catch (err) {
+        console.error("Error fetching seller data:", err);
+        alert("Error loading user data. Please try again.");
+      }
+    };
+
+    fetchSellerData();
+  }, [navigate]);
+
+  // ✅ STEP 2: Fetch product details and farmerId
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     
@@ -36,7 +85,6 @@ function OrderPage() {
     if (priceFromUrl) {
       setUnitPrice(Number(priceFromUrl));
       console.log("Unit price set from URL:", Number(priceFromUrl));
-      return;
     }
     
     const productNameFromUrl = params.get("item");
@@ -53,15 +101,38 @@ function OrderPage() {
         .then((product) => {
           console.log("Fetched product:", product);
           
-          if (product && product.price) {
-            setUnitPrice(Number(product.price));
-            setAvailableQuantity(Number(product.quantity));
-            setProductId(product._id);
+          if (product) {
+            if (product.price) setUnitPrice(Number(product.price));
+            if (product.quantity) setAvailableQuantity(Number(product.quantity));
+            if (product._id) setProductId(product._id);
+            
+            // ✅ CRITICAL: Get farmerId from product
+            if (product.farmerId) {
+              // If farmerId is populated (object), get the _id
+              const farmerIdValue = typeof product.farmerId === 'object' 
+                ? product.farmerId._id 
+                : product.farmerId;
+              setFarmerId(farmerIdValue);
+              console.log("✅ Farmer ID from product:", farmerIdValue);
+            } else if (product.userId) {
+              // Some schemas use userId instead of farmerId
+              const userIdValue = typeof product.userId === 'object' 
+                ? product.userId._id 
+                : product.userId;
+              setFarmerId(userIdValue);
+              console.log("✅ Farmer ID (from userId):", userIdValue);
+            } else {
+              console.warn("⚠️ No farmerId found in product");
+            }
+            
             console.log("Unit price set from API:", Number(product.price));
             console.log("Available quantity:", Number(product.quantity));
           }
         })
-        .catch((error) => console.error("Error fetching price:", error));
+        .catch((error) => {
+          console.error("Error fetching product:", error);
+          alert("Failed to load product details. Please try again.");
+        });
     }
   }, [location.search]);
 
@@ -103,20 +174,36 @@ function OrderPage() {
       return;
     }
 
-    if (!formData.quantity || !formData.district || !formData.company || !formData.mobile || !formData.email || !formData.address || !formData.expireDate) {
+    if (!formData.quantity || !formData.district || !formData.company || 
+        !formData.mobile || !formData.email || !formData.address || !formData.expireDate) {
       alert("Please fill in all required fields!");
+      return;
+    }
+
+    // ✅ Validate sellerId
+    if (!sellerId) {
+      alert("User session expired. Please log in again.");
+      console.error("Missing sellerId - user not logged in");
+      navigate("/login");
+      return;
+    }
+
+    // ✅ Validate farmerId
+    if (!farmerId) {
+      alert("Product owner information is missing. Please try again or contact support.");
+      console.error("Missing farmerId - cannot create order");
       return;
     }
 
     setIsSubmitting(true);
 
     try {
-      // Create the order - matching your schema
+      // ✅ Create the order with BOTH sellerId and farmerId
       const orderData = {
-        name: formData.company, // Using company as name
+        name: formData.company,
         item: formData.productName,
         productImage: formData.productImage,
-        category: "vegetable", // Default category
+        category: "vegetable",
         quantity: Number(formData.quantity),
         price: Number(formData.price),
         district: formData.district,
@@ -126,10 +213,14 @@ function OrderPage() {
         address: formData.address,
         postedDate: new Date().toISOString().split('T')[0],
         expireDate: formData.expireDate,
-        status: "pending"
+        status: "pending",
+        sellerId: sellerId, // ✅ CRITICAL: Seller placing the order
+        farmerId: farmerId, // ✅ CRITICAL: Farmer who owns the product
       };
 
-      console.log("Submitting order:", orderData);
+      console.log("📦 Submitting order with data:", orderData);
+      console.log("   Seller ID:", sellerId);
+      console.log("   Farmer ID:", farmerId);
 
       // Submit order to backend
       const orderResponse = await fetch(`${BASE_URL}/sellerorder/add`, {
@@ -144,18 +235,18 @@ function OrderPage() {
       console.log("Order response:", orderResult);
 
       if (!orderResponse.ok) {
-        throw new Error(orderResult.message || "Failed to create order");
+        throw new Error(orderResult.message || orderResult.error || "Failed to create order");
       }
 
-      console.log("Order created successfully:", orderResult);
+      console.log("✅ Order created successfully:", orderResult);
 
       alert("Order placed successfully! Waiting for farmer approval.");
       
-      // Navigate to seller page or orders page
+      // Navigate to seller page
       navigate("/regseller");
       
     } catch (error) {
-      console.error("Error submitting order:", error);
+      console.error("❌ Error submitting order:", error);
       alert(`Failed to place order: ${error.message}`);
     } finally {
       setIsSubmitting(false);
@@ -320,7 +411,7 @@ function OrderPage() {
           required
         />
 
-        <button type="submit" disabled={isSubmitting || quantityError}>
+        <button type="submit" disabled={isSubmitting || quantityError || !sellerId}>
           {isSubmitting ? "Placing Order..." : "Place Order"}
         </button>
       </form>
@@ -328,4 +419,4 @@ function OrderPage() {
   );
 }
 
-export default OrderPage;
+export default OrderPage

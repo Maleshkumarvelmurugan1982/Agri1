@@ -3,13 +3,18 @@ import "./RegVegetablePage.css";
 import Navbar from "../../NavbarRegistered/NavbarRegistered";
 import FooterNew from "../../Footer/FooterNew";
 import { FontAwesomeIcon } from "@fortawesome/react-fontawesome";
-import { faSearch, faSquarePlus, faCartPlus, faTimes } from "@fortawesome/free-solid-svg-icons";
+import { faSearch, faSquarePlus, faCartPlus, faTimes, faArrowLeft } from "@fortawesome/free-solid-svg-icons";
+import { useNavigate } from "react-router-dom";
 
 function RegVegetablePage() {
+  const navigate = useNavigate();
   const [products, setProducts] = useState([]);
   const [filteredProducts, setFilteredProducts] = useState([]);
   const [searchQuery, setSearchQuery] = useState("");
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [farmerId, setFarmerId] = useState("");
+  const [sellerId, setSellerId] = useState("");
+  const [userType, setUserType] = useState(""); // 'farmer' or 'seller'
   const [newProduct, setNewProduct] = useState({
     productName: "",
     quantity: "",
@@ -20,19 +25,112 @@ function RegVegetablePage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [editProduct, setEditProduct] = useState(null);
 
+  const BASE_URL = "http://localhost:8070";
+
+  // ✅ Handle back button navigation
+  const handleBackClick = () => {
+    if (userType === "farmer") {
+      navigate("/regfarmer");
+    } else if (userType === "seller") {
+      navigate("/regseller");
+    }
+  };
+
+  // ✅ Detect user type and fetch user data
   useEffect(() => {
+    const fetchUserData = async () => {
+      try {
+        const token = localStorage.getItem("token");
+        if (!token) {
+          console.error("No token found");
+          alert("Please login first");
+          return;
+        }
+
+        // Try fetching as farmer first
+        try {
+          const farmerRes = await fetch(`${BASE_URL}/farmer/userdata`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token }),
+          });
+          
+          const farmerData = await farmerRes.json();
+          if (farmerData.status === "ok") {
+            setFarmerId(farmerData.data._id);
+            setUserType("farmer");
+            console.log("Logged in as Farmer:", farmerData.data._id);
+            return;
+          }
+        } catch (err) {
+          console.log("Not a farmer, trying seller...");
+        }
+
+        // If not farmer, try seller
+        try {
+          const sellerRes = await fetch(`${BASE_URL}/seller/userdata`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token }),
+          });
+          
+          const sellerData = await sellerRes.json();
+          if (sellerData.status === "ok") {
+            setSellerId(sellerData.data._id);
+            setUserType("seller");
+            console.log("Logged in as Seller:", sellerData.data._id);
+            return;
+          }
+        } catch (err) {
+          console.log("Not a seller either");
+        }
+
+        alert("Unable to identify user type. Please login again.");
+      } catch (err) {
+        console.error("Error fetching user data:", err);
+      }
+    };
+    fetchUserData();
+  }, []);
+
+  // ✅ Fetch products based on user type
+  useEffect(() => {
+    if (!userType) return;
+
     const fetchProducts = async () => {
       try {
-        const response = await fetch("http://localhost:8070/product/category/vegetable");
+        let response;
+        
+        if (userType === "farmer") {
+          // Farmers see only THEIR OWN products
+          if (!farmerId) return;
+          response = await fetch(`${BASE_URL}/product/farmer/${farmerId}/category/vegetable`);
+          console.log("Fetching farmer's own products...");
+        } else if (userType === "seller") {
+          // Sellers see ALL vegetable products from ALL farmers
+          response = await fetch(`${BASE_URL}/product/category/vegetable`);
+          console.log("Fetching all vegetable products for seller...");
+        }
+        
         if (!response.ok) {
-          console.error("Error fetching products:", response.status, response.statusText);
+          console.error("Error fetching products:", response.status);
           setProducts([]);
           setFilteredProducts([]);
           return;
         }
+        
         const data = await response.json();
-        setProducts(data);
-        setFilteredProducts(data);
+        console.log("Fetched products:", data);
+        
+        // If seller, filter out products without stock
+        if (userType === "seller") {
+          const availableProducts = data.filter(p => p.quantity > 0);
+          setProducts(availableProducts);
+          setFilteredProducts(availableProducts);
+        } else {
+          setProducts(data);
+          setFilteredProducts(data);
+        }
       } catch (error) {
         console.error("Error fetching products:", error);
         setProducts([]);
@@ -41,7 +139,7 @@ function RegVegetablePage() {
     };
 
     fetchProducts();
-  }, []);
+  }, [userType, farmerId, BASE_URL]);
 
   useEffect(() => {
     const filtered = products.filter((product) =>
@@ -61,34 +159,51 @@ function RegVegetablePage() {
 
   const handleAddProduct = async (e) => {
     e.preventDefault();
+    
+    if (!farmerId) {
+      alert("Farmer ID not found. Please login again.");
+      return;
+    }
+
     try {
       const formData = new FormData();
       formData.append("productName", newProduct.productName);
       formData.append("quantity", newProduct.quantity);
       formData.append("price", newProduct.price);
       formData.append("category", "vegetable");
+      formData.append("farmerId", farmerId);
+      
       if (newProduct.productImage) {
         formData.append("productImage", newProduct.productImage);
       }
 
-      const response = await fetch("http://localhost:8070/product/add", {
+      console.log("Adding product with farmerId:", farmerId);
+
+      const response = await fetch(`${BASE_URL}/product/add`, {
         method: "POST",
         body: formData,
       });
 
       if (!response.ok) {
-        console.error("Failed to add product:", response.status, response.statusText);
+        const errorData = await response.json();
+        console.error("Failed to add product:", errorData);
+        alert(`Failed to add product: ${errorData.message || 'Unknown error'}`);
         return;
       }
 
       const addedProduct = await response.json();
+      console.log("Product added successfully:", addedProduct);
+      
       const updatedProducts = [...products, addedProduct];
       setProducts(updatedProducts);
       setFilteredProducts(updatedProducts);
       setIsModalOpen(false);
       setNewProduct({ productName: "", quantity: "", price: "", productImage: null });
+      
+      alert("Product added successfully!");
     } catch (err) {
       console.error("Error adding product:", err);
+      alert("Error adding product. Please try again.");
     }
   };
 
@@ -105,7 +220,7 @@ function RegVegetablePage() {
   const handleUpdateProduct = async (e) => {
     e.preventDefault();
     try {
-      const response = await fetch(`http://localhost:8070/product/${editProduct._id}`, {
+      const response = await fetch(`${BASE_URL}/product/${editProduct._id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -116,6 +231,7 @@ function RegVegetablePage() {
 
       if (!response.ok) {
         console.error("Failed to update product");
+        alert("Failed to update product");
         return;
       }
 
@@ -127,8 +243,11 @@ function RegVegetablePage() {
       setFilteredProducts(updatedProducts);
       setIsEditModalOpen(false);
       setEditProduct(null);
+      
+      alert("Product updated successfully!");
     } catch (err) {
       console.error("Error updating product:", err);
+      alert("Error updating product. Please try again.");
     }
   };
 
@@ -136,18 +255,24 @@ function RegVegetablePage() {
     if (!window.confirm("Are you sure you want to delete this product?")) return;
 
     try {
-      const response = await fetch(`http://localhost:8070/product/${productId}`, {
+      const response = await fetch(`${BASE_URL}/product/${productId}`, {
         method: "DELETE",
       });
+      
       if (!response.ok) {
         console.error("Failed to delete product");
+        alert("Failed to delete product");
         return;
       }
+      
       const updatedProducts = products.filter((p) => p._id !== productId);
       setProducts(updatedProducts);
       setFilteredProducts(updatedProducts);
+      
+      alert("Product deleted successfully!");
     } catch (err) {
       console.error("Error deleting product:", err);
+      alert("Error deleting product. Please try again.");
     }
   };
 
@@ -155,6 +280,41 @@ function RegVegetablePage() {
     <div>
       <Navbar />
       <div className="nothing-cateogory-pages-veg"></div>
+
+      {/* ✅ Back Button */}
+      {userType && (
+        <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
+          <button
+            onClick={handleBackClick}
+            style={{
+              padding: '10px 20px',
+              fontSize: '16px',
+              fontWeight: '600',
+              backgroundColor: '#6c757d',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '8px',
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              transition: 'all 0.3s ease',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.1)'
+            }}
+            onMouseOver={(e) => {
+              e.target.style.backgroundColor = '#5a6268';
+              e.target.style.transform = 'translateX(-5px)';
+            }}
+            onMouseOut={(e) => {
+              e.target.style.backgroundColor = '#6c757d';
+              e.target.style.transform = 'translateX(0)';
+            }}
+          >
+            <FontAwesomeIcon icon={faArrowLeft} />
+            Back to {userType === "farmer" ? "Farmer" : "Seller"} Page
+          </button>
+        </div>
+      )}
 
       <div className="search-container-veg">
         <input
@@ -168,55 +328,97 @@ function RegVegetablePage() {
           <FontAwesomeIcon icon={faSearch} />
         </button>
 
-        <button className="add-products-button" onClick={() => setIsModalOpen(true)}>
-          <FontAwesomeIcon icon={faSquarePlus} /> Add New Product
-        </button>
+        {/* ✅ Show "Add Product" button ONLY for farmers */}
+        {userType === "farmer" && (
+          <button className="add-products-button" onClick={() => setIsModalOpen(true)}>
+            <FontAwesomeIcon icon={faSquarePlus} /> Add New Product
+          </button>
+        )}
 
-        <button
-          className="make-order-button-veg"
-          onClick={() => (window.location.href = "http://localhost:3000/order")}
-        >
-          <FontAwesomeIcon icon={faCartPlus} /> Make an Order
-        </button>
+        {/* ✅ Show "Make Order" button ONLY for sellers */}
+        {userType === "seller" && (
+          <button
+            className="make-order-button-veg"
+            onClick={() => (window.location.href = "/order")}
+          >
+            <FontAwesomeIcon icon={faCartPlus} /> Make an Order
+          </button>
+        )}
       </div>
 
       <div className="products-container-veg">
         {filteredProducts.length > 0 ? (
           filteredProducts.map((product) => (
             <div className="products-item-veg" key={product._id}>
-              <a
-                href={`/order?image=${encodeURIComponent(product.productImage)}&item=${encodeURIComponent(
-                  product.productName
-                )}`}
-                className="product-item-veg-link"
-              >
-                <img
-                  src={`http://localhost:8070${product.productImage}`}
-                  alt={product.productName}
-                  style={{
-                    width: "150px",
-                    height: "150px",
-                    objectFit: "cover",
-                    borderRadius: "8px",
-                    outline: "none",
-                    boxShadow: "none",
-                  }}
-                />
-                <p>{product.productName}</p>
-                <p>Qty: {product.quantity}</p>
-                <p>Price: ${product.price}</p>
-              </a>
-              <button onClick={() => handleEditClick(product)}>Edit</button>
-              <button onClick={() => handleDeleteProduct(product._id)}>Delete</button>
+              {/* ✅ SELLER: Can click to order */}
+              {userType === "seller" ? (
+                <a
+                  href={`/order?image=${encodeURIComponent(product.productImage)}&item=${encodeURIComponent(
+                    product.productName
+                  )}`}
+                  className="product-item-veg-link"
+                >
+                  <img
+                    src={`${BASE_URL}${product.productImage}`}
+                    alt={product.productName}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                    }}
+                    style={{
+                      width: "150px",
+                      height: "150px",
+                      objectFit: "cover",
+                      borderRadius: "8px",
+                    }}
+                  />
+                  <p><strong>{product.productName}</strong></p>
+                  <p>Qty: {product.quantity} kg</p>
+                  <p>Price: Rs.{product.price}</p>
+                </a>
+              ) : (
+                /* ✅ FARMER: Just view (no click to order) */
+                <div className="product-item-veg-view">
+                  <img
+                    src={`${BASE_URL}${product.productImage}`}
+                    alt={product.productName}
+                    onError={(e) => {
+                      e.target.onerror = null;
+                      e.target.src = 'https://via.placeholder.com/150?text=No+Image';
+                    }}
+                    style={{
+                      width: "150px",
+                      height: "150px",
+                      objectFit: "cover",
+                      borderRadius: "8px",
+                    }}
+                  />
+                  <p><strong>{product.productName}</strong></p>
+                  <p>Qty: {product.quantity} kg</p>
+                  <p>Price: Rs.{product.price}</p>
+                </div>
+              )}
+              
+              {/* ✅ Show Edit/Delete buttons ONLY for farmers */}
+              {userType === "farmer" && (
+                <div className="product-actions">
+                  <button onClick={() => handleEditClick(product)}>Edit</button>
+                  <button onClick={() => handleDeleteProduct(product._id)}>Delete</button>
+                </div>
+              )}
             </div>
           ))
         ) : (
-          <p>No products found.</p>
+          <p>
+            {userType === "farmer" 
+              ? "No products found. Add your first product!" 
+              : "No products available for ordering."}
+          </p>
         )}
       </div>
 
-      {/* Add Product Modal */}
-      {isModalOpen && (
+      {/* ✅ Add Product Modal - ONLY for farmers */}
+      {isModalOpen && userType === "farmer" && (
         <div className="modal-overlay">
           <div className="modal-content">
             <FontAwesomeIcon icon={faTimes} className="close-icon" onClick={() => setIsModalOpen(false)} />
@@ -231,21 +433,25 @@ function RegVegetablePage() {
                 required
               />
 
-              <label>Quantity:</label>
+              <label>Quantity (kg):</label>
               <input
                 type="number"
                 name="quantity"
                 value={newProduct.quantity}
                 onChange={handleInputChange}
+                min="0"
+                step="0.1"
                 required
               />
 
-              <label>Price:</label>
+              <label>Price (Rs.):</label>
               <input
                 type="number"
                 name="price"
                 value={newProduct.price}
                 onChange={handleInputChange}
+                min="0"
+                step="0.01"
                 required
               />
 
@@ -258,29 +464,43 @@ function RegVegetablePage() {
         </div>
       )}
 
-      {/* Edit Product Modal */}
-      {isEditModalOpen && editProduct && (
+      {/* ✅ Edit Product Modal - ONLY for farmers */}
+      {isEditModalOpen && editProduct && userType === "farmer" && (
         <div className="modal-overlay">
           <div className="modal-content">
             <FontAwesomeIcon icon={faTimes} className="close-icon" onClick={() => setIsEditModalOpen(false)} />
             <h2>Edit Product</h2>
             <form onSubmit={handleUpdateProduct}>
-              <label>Quantity:</label>
+              <label>Product Name:</label>
+              <input
+                type="text"
+                value={editProduct.productName}
+                disabled
+                style={{ backgroundColor: '#f0f0f0', cursor: 'not-allowed' }}
+              />
+              
+              <label>Quantity (kg):</label>
               <input
                 type="number"
                 name="quantity"
                 value={editProduct.quantity}
                 onChange={handleEditInputChange}
+                min="0"
+                step="0.1"
                 required
               />
-              <label>Price:</label>
+              
+              <label>Price (Rs.):</label>
               <input
                 type="number"
                 name="price"
                 value={editProduct.price}
                 onChange={handleEditInputChange}
+                min="0"
+                step="0.01"
                 required
               />
+              
               <button type="submit">Update Product</button>
             </form>
           </div>

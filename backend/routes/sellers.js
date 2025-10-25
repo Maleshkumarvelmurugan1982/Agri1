@@ -92,22 +92,43 @@ router.post("/login", async (req, res) => {
   }
 });
 
-// Route to fetch seller data
+// ✅ FIXED: Route to fetch seller data (removed duplicate)
 // http://localhost:8070/seller/userdata
 router.post("/userdata", async (req, res) => {
-  const { token } = req.body;
-
   try {
-    const seller = jwt.verify(token, JWT_SECRET);
-    const sellerEmail = seller.email;
-    const data = await Seller.findOne({ email: sellerEmail });
-    res.send({ status: "ok", data: data });
+    const { token } = req.body;
+    
+    if (!token) {
+      return res.status(400).json({ status: "error", message: "Token is required" });
+    }
+    
+    // Verify and decode token
+    const decoded = jwt.verify(token, JWT_SECRET);
+    const sellerEmail = decoded.email;
+    
+    // Find seller by email
+    const seller = await Seller.findOne({ email: sellerEmail }).select('-password');
+    
+    if (!seller) {
+      return res.status(404).json({ status: "error", message: "Seller not found" });
+    }
+    
+    console.log("✅ Seller data fetched:", seller._id, seller.email);
+    
+    res.json({ status: "ok", data: seller });
   } catch (error) {
-    console.error(error);
-    res.send({ status: "error", data: error });
+    console.error("❌ Error fetching seller data:", error);
+    
+    if (error.name === 'JsonWebTokenError') {
+      return res.status(401).json({ status: "error", message: "Invalid token" });
+    }
+    if (error.name === 'TokenExpiredError') {
+      return res.status(401).json({ status: "error", message: "Token expired" });
+    }
+    
+    res.status(500).json({ status: "error", message: "Server error", data: error.message });
   }
 });
-
 
 //done by admin
 //http://localhost:8070/seller/
@@ -171,7 +192,7 @@ router.route("/get/:id").get(async (req, res) => {
     })
     .catch((error) => {
       console.log(error);
-      res.status(500).send({ status: "error with ferching student" });
+      res.status(500).send({ status: "error with fetching seller" });
     });
 });
 
