@@ -297,17 +297,24 @@ router.get("/", (req, res) => {
     .catch(err => res.status(500).send({ status: "Error fetching seller orders" }));
 });
 
-// ✅ EXISTING: Add new seller order with farmerId and sellerId
+// ✅ UPDATED: Add new seller order with payment information
 router.post("/add", async (req, res) => {
   try {
     const {
       name, item, productImage, category, quantity, price,
       district, company, mobile, land, email, address, postedDate, expireDate,
-      farmerId, // ✅ CRITICAL: Farmer who owns the product
-      sellerId  // ✅ CRITICAL: Seller who is placing the order
+      farmerId,      // ✅ CRITICAL: Farmer who owns the product
+      sellerId,      // ✅ CRITICAL: Seller who is placing the order
+      paymentMethod, // ✅ NEW: Payment method (wallet/card)
+      paymentStatus, // ✅ NEW: Payment status (completed/pending)
+      isPaid         // ✅ NEW: Payment flag
     } = req.body;
     
     console.log("📝 Creating order with data:", req.body);
+    console.log("💰 Received Payment Info:");
+    console.log("   - paymentMethod:", paymentMethod);
+    console.log("   - paymentStatus:", paymentStatus);
+    console.log("   - isPaid:", isPaid);
     
     // ✅ Validate required fields
     if (!farmerId) {
@@ -326,6 +333,26 @@ router.post("/add", async (req, res) => {
       });
     }
     
+    // Determine payment status based on method and isPaid flag
+    let finalPaymentStatus = "pending";
+    let finalPaidAmount = 0;
+    let finalPaymentDate = null;
+    
+    if (paymentMethod === "wallet" && (isPaid === true || paymentStatus === "completed")) {
+      finalPaymentStatus = "paid";
+      finalPaidAmount = Number(price) || 0;
+      finalPaymentDate = new Date();
+    } else if (paymentMethod === "card") {
+      finalPaymentStatus = "pending";
+      finalPaidAmount = 0;
+      finalPaymentDate = null;
+    }
+    
+    console.log("✅ Final Payment Details:");
+    console.log("   - Status:", finalPaymentStatus);
+    console.log("   - Amount:", finalPaidAmount);
+    console.log("   - Date:", finalPaymentDate);
+    
     const newOrder = new SellerOrder({
       name: name || "",
       item, 
@@ -340,17 +367,58 @@ router.post("/add", async (req, res) => {
       address, 
       postedDate: postedDate || new Date().toISOString().split('T')[0],
       expireDate,
-      farmerId,  // ✅ CRITICAL: Store farmerId
-      sellerId,  // ✅ CRITICAL: Store sellerId
+      farmerId,           // ✅ CRITICAL: Store farmerId
+      sellerId,           // ✅ CRITICAL: Store sellerId
       status: "pending",
       deliverymanId: null,
       acceptedByDeliveryman: false,
-      deliveryStatus: "pending"
+      deliveryStatus: "pending",
+      // ✅ Payment fields (matching model schema)
+      paymentMethod: paymentMethod || "wallet",
+      paymentStatus: finalPaymentStatus,
+      paidAmount: finalPaidAmount,
+      paymentDate: finalPaymentDate,
+      refundAmount: 0,
+      refundDate: null
     });
     
     const savedOrder = await newOrder.save();
     
-    console.log("✅ Order created successfully:", savedOrder);
+    console.log("✅ Order created successfully!");
+    console.log("💰 Saved Payment Info:");
+    console.log("   - Method:", savedOrder.paymentMethod);
+    console.log("   - Status:", savedOrder.paymentStatus);
+    console.log("   - Amount:", savedOrder.paidAmount);
+    console.log("   - Date:", savedOrder.paymentDate);
+    
+    // ✅ Reduce product quantity when order is placed
+    try {
+      // Try to find product by productName field
+      let product = await Product.findOne({ productName: item });
+      
+      // If not found, try by name field (fallback)
+      if (!product) {
+        product = await Product.findOne({ name: item });
+      }
+      
+      if (product) {
+        console.log("🔍 Found product:", product.productName || product.name);
+        console.log("   Current quantity:", product.quantity);
+        
+        if (product.quantity >= quantity) {
+          product.quantity -= quantity;
+          await product.save();
+          console.log(`✅ Product quantity reduced by ${quantity} kg`);
+          console.log(`   New quantity: ${product.quantity} kg`);
+        } else {
+          console.error("❌ Insufficient product quantity");
+        }
+      } else {
+        console.error("❌ Product not found for quantity reduction:", item);
+      }
+    } catch (err) {
+      console.error("❌ Error reducing product quantity:", err);
+    }
     
     res.status(201).json({ 
       message: "New Seller Order added successfully!",
@@ -382,33 +450,10 @@ router.put("/update/:id", async (req, res) => {
     
     console.log("✅ Order found:", order);
     
-    // If approved for the first time, reduce product quantity
+    // ❌ REMOVED: No longer reducing quantity on approval since it's already reduced on order creation
+    // The quantity was already reduced when the order was placed
     if (status === "approved" && order.status !== "approved") {
-      // Try to find product by productName field
-      let product = await Product.findOne({ productName: order.item });
-      
-      // If not found, try by name field (fallback)
-      if (!product) {
-        product = await Product.findOne({ name: order.item });
-      }
-      
-      console.log("🔍 Product lookup for:", order.item);
-      
-      if (!product) {
-        console.log("❌ Product not found:", order.item);
-        return res.status(404).json({ status: "Product not found" });
-      }
-      
-      console.log("✅ Product found:", product);
-      
-      if (product.quantity < order.quantity) {
-        console.log("❌ Insufficient quantity");
-        return res.status(400).json({ status: "Not enough product quantity" });
-      }
-      
-      product.quantity -= order.quantity;
-      await product.save();
-      console.log(`✅ Product quantity updated: ${product.productName || product.name} - ${order.quantity} kg`);
+      console.log("✅ Order approved by farmer (quantity already reduced at order time)");
     }
     
     // Build update object with only provided fields

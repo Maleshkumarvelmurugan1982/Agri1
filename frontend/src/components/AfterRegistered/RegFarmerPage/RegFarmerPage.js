@@ -15,7 +15,10 @@ import {
   faCheckCircle, 
   faTimesCircle,
   faHistory,
-  faTimes
+  faTimes,
+  faWallet,
+  faCreditCard,
+  faMoneyBillWave
 } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
@@ -82,13 +85,12 @@ function FarmerPage() {
         const data = await response.json();
         console.log("Seller Orders Response:", data);
         
-        if (Array.isArray(data)) {
+        if (data.status === 'ok' && data.orders) {
+          setSellerOrders(data.orders);
+        } else if (Array.isArray(data)) {
           setSellerOrders(data);
         } else if (data.data && Array.isArray(data.data)) {
           setSellerOrders(data.data);
-        } else if (data.message) {
-          console.error("Backend error:", data.message);
-          setSellerOrders([]);
         } else {
           console.error("Unexpected data format:", data);
           setSellerOrders([]);
@@ -171,21 +173,56 @@ function FarmerPage() {
         alert("Order not found");
         return;
       }
-      const res = await fetch(`${BASE_URL}/sellerorder/update/${orderId}`, {
-        method: "PUT",
+
+      // Show confirmation dialog with refund info
+      if (newStatus === 'disapproved') {
+        const confirmMessage = order.paymentStatus === 'paid' 
+          ? `Are you sure you want to disapprove this order?\n\nThe seller will be refunded Rs. ${order.price}\nPayment Method: ${order.paymentMethod || 'wallet'}`
+          : `Are you sure you want to disapprove this order?`;
+        
+        if (!window.confirm(confirmMessage)) {
+          return;
+        }
+      }
+
+      // Use the new endpoint with refund logic
+      const res = await fetch(`${BASE_URL}/sellerorder/update-status`, {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ status: newStatus }),
+        body: JSON.stringify({ 
+          orderId: orderId, 
+          status: newStatus,
+          farmerId: farmerId
+        }),
       });
+      
       if (!res.ok) throw new Error("Failed to update order");
       
-      const updatedOrder = await res.json();
-      setSellerOrders(prev =>
-        prev.map(o => o._id === orderId ? updatedOrder.order : o)
-      );
-      alert(`Order ${newStatus} successfully!`);
+      const result = await res.json();
+      
+      if (result.status === 'ok') {
+        // Update local state
+        setSellerOrders(prev =>
+          prev.map(o => o._id === orderId ? result.order : o)
+        );
+        
+        // Show success message
+        if (newStatus === 'disapproved' && result.refunded) {
+          alert(`Order disapproved successfully!\n\nRefund Details:\nAmount: Rs. ${result.refundAmount}\nStatus: Refunded to seller's ${order.paymentMethod || 'wallet'}`);
+        } else {
+          alert(`Order ${newStatus} successfully!`);
+        }
+        
+        // Refresh orders to get updated data
+        const response = await fetch(`${BASE_URL}/sellerorder/farmer/${farmerId}`);
+        const data = await response.json();
+        if (data.status === 'ok' && data.orders) {
+          setSellerOrders(data.orders);
+        }
+      }
     } catch (err) {
       console.error("Error updating order:", err);
-      alert("Error updating order");
+      alert("Error updating order: " + err.message);
     }
   };
 
@@ -195,6 +232,42 @@ function FarmerPage() {
       case "disapproved": return "red";
       default: return "orange";
     }
+  };
+
+  const getPaymentStatusBadge = (paymentStatus, paymentMethod) => {
+    const statusConfig = {
+      paid: { color: '#28a745', icon: faCheckCircle, text: 'PAID' },
+      refunded: { color: '#ffc107', icon: faMoneyBillWave, text: 'REFUNDED' },
+      pending: { color: '#6c757d', icon: faInfoCircle, text: 'PENDING' },
+      failed: { color: '#dc3545', icon: faTimesCircle, text: 'FAILED' }
+    };
+
+    const config = statusConfig[paymentStatus] || statusConfig.pending;
+    const methodIcon = paymentMethod === 'wallet' ? faWallet : faCreditCard;
+
+    return (
+      <div style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: '5px',
+        padding: '5px 12px',
+        backgroundColor: `${config.color}20`,
+        borderRadius: '20px',
+        border: `2px solid ${config.color}`,
+        fontSize: '12px',
+        fontWeight: '600',
+        marginTop: '8px'
+      }}>
+        <FontAwesomeIcon icon={config.icon} style={{ color: config.color }} />
+        <span style={{ color: config.color }}>{config.text}</span>
+        {paymentMethod && (
+          <>
+            <span style={{ color: config.color }}>via</span>
+            <FontAwesomeIcon icon={methodIcon} style={{ color: config.color }} />
+          </>
+        )}
+      </div>
+    );
   };
 
   const getDeliveryStatusBadge = (deliveryStatus) => {
@@ -390,6 +463,11 @@ function FarmerPage() {
                           <strong>Delivered to:</strong> {sellerName}
                         </p>
                       </div>
+                      {order.paymentStatus && (
+                        <div style={{ marginTop: '10px' }}>
+                          {getPaymentStatusBadge(order.paymentStatus, order.paymentMethod)}
+                        </div>
+                      )}
                       {hasDeliverymanInfo && (
                         <div style={{ 
                           marginTop: '10px', 
@@ -701,6 +779,11 @@ function FarmerPage() {
                     }} 
                   />
                   <p><strong>{order.item}</strong></p>
+                  {order.orderNumber && (
+                    <p style={{ fontSize: '12px', color: '#666' }}>
+                      Order #: {order.orderNumber}
+                    </p>
+                  )}
                   <p>Quantity: {order.quantity}</p>
                   <p>Price: Rs.{order.price}</p>
                   <p>
@@ -708,6 +791,9 @@ function FarmerPage() {
                       {order.status?.toUpperCase() || "PENDING"}
                     </b>
                   </p>
+                  
+                  {/* Payment Status Badge */}
+                  {order.paymentStatus && getPaymentStatusBadge(order.paymentStatus, order.paymentMethod)}
                   
                   {order.acceptedByDeliveryman && order.status === "approved" && (
                     <div className="delivery-info">
@@ -735,30 +821,32 @@ function FarmerPage() {
                     </div>
                   )}
                   
-                  {order.status !== "approved" && order.status !== "disapproved" && !order.acceptedByDeliveryman && (
+                  {order.status !== "approved" && order.status !== "disapproved" && (
                     <div className="order-buttons">
                       <button 
                         onClick={() => handleOrderStatus(order._id, "approved")}
+                        style={{
+                          backgroundColor: '#28a745',
+                          color: 'white',
+                          border: 'none',
+                          padding: '8px 16px',
+                          borderRadius: '5px',
+                          cursor: 'pointer',
+                          marginRight: '10px'
+                        }}
                       >
                         <FontAwesomeIcon icon={faThumbsUp}/> Approve
                       </button>
                       <button 
                         onClick={() => handleOrderStatus(order._id, "disapproved")}
-                      >
-                        <FontAwesomeIcon icon={faThumbsDown}/> Disapprove
-                      </button>
-                    </div>
-                  )}
-                  
-                  {order.acceptedByDeliveryman && order.status !== "approved" && order.status !== "disapproved" && (
-                    <div className="order-buttons">
-                      <button 
-                        onClick={() => handleOrderStatus(order._id, "approved")}
-                      >
-                        <FontAwesomeIcon icon={faThumbsUp}/> Approve
-                      </button>
-                      <button 
-                        onClick={() => handleOrderStatus(order._id, "disapproved")}
+                        style={{
+                          backgroundColor: '#dc3545',
+                          color: 'white',
+                          border: 'none',
+                          padding: '8px 16px',
+                          borderRadius: '5px',
+                          cursor: 'pointer'
+                        }}
                       >
                         <FontAwesomeIcon icon={faThumbsDown}/> Disapprove
                       </button>
@@ -774,6 +862,11 @@ function FarmerPage() {
                   {order.status === "disapproved" && (
                     <div className="order-status-message-disapproved">
                       <p>✗ Order Disapproved</p>
+                      {order.paymentStatus === 'refunded' && (
+                        <p style={{ fontSize: '12px', marginTop: '5px' }}>
+                          💰 Refund processed
+                        </p>
+                      )}
                     </div>
                   )}
                 </div>

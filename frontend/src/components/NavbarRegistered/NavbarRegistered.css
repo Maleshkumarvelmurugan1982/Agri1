@@ -89,3 +89,63 @@
 .cartitem {
   display: none !important;
 }
+
+/* Wallet Button Styling */
+.wallet-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  margin-right: 10px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  border-radius: 20px;
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 14px;
+  transition: all 0.3s ease;
+  box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+}
+
+.wallet-btn:hover {
+  background: linear-gradient(135deg, #764ba2 0%, #667eea 100%);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(102, 126, 234, 0.5);
+  color: white;
+}
+
+.wallet-text {
+  display: inline-block;
+}
+
+/* Responsive: Hide text on small screens, show only icon */
+@media (max-width: 768px) {
+  .wallet-text {
+    display: none;
+  }
+  
+  .wallet-btn {
+    padding: 8px 12px;
+    border-radius: 50%;
+  }
+}
+
+/* Profile button adjustment to match */
+.profile-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 12px;
+  margin-right: 10px;
+  background-color: #f8f9fa;
+  color: #333;
+  border-radius: 50%;
+  text-decoration: none;
+  transition: all 0.3s ease;
+}
+
+.profile-btn:hover {
+  background-color: #007bff;
+  color: white;
+  transform: translateY(-2px);
+}

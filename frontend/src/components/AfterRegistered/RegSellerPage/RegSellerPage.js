@@ -13,7 +13,8 @@ import {
   faInfoCircle,
   faHistory,
   faTimes,
-  faUser
+  faUser,
+  faWallet
 } from "@fortawesome/free-solid-svg-icons";
 import TypeWriter from "../../AutoWritingText/TypeWriter";
 
@@ -322,6 +323,40 @@ function RegSellerPage() {
           className="writer" 
           textStyle={{ fontFamily: "Gill Sans", fontSize: "60px" }} 
         />
+      </div>
+
+      {/* Wallet Link Button */}
+      <div style={{ textAlign: 'center', margin: '30px 0' }}>
+        <a 
+          href="/seller/wallet" 
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '12px',
+            padding: '16px 40px',
+            fontSize: '18px',
+            fontWeight: 'bold',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            color: 'white',
+            border: 'none',
+            borderRadius: '50px',
+            textDecoration: 'none',
+            boxShadow: '0 8px 20px rgba(102, 126, 234, 0.3)',
+            transition: 'all 0.3s ease',
+            cursor: 'pointer'
+          }}
+          onMouseOver={(e) => {
+            e.currentTarget.style.transform = 'translateY(-3px)';
+            e.currentTarget.style.boxShadow = '0 12px 28px rgba(102, 126, 234, 0.4)';
+          }}
+          onMouseOut={(e) => {
+            e.currentTarget.style.transform = 'translateY(0)';
+            e.currentTarget.style.boxShadow = '0 8px 20px rgba(102, 126, 234, 0.3)';
+          }}
+        >
+          <FontAwesomeIcon icon={faWallet} style={{ fontSize: '22px' }} />
+          <span>My Wallet</span>
+        </a>
       </div>
 
       <div className="categories-container">

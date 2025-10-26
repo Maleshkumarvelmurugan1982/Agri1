@@ -37,6 +37,7 @@ import RegDeliverymanPage from './components/AfterRegistered/RegDeliverymanPage/
 //import DeliverymanWork from './components/DeliverymanWork';
 //import { Routes, Route } from 'react-router-dom';
 import Schemes from "./components/GovernmentPage/schemes";
+import WalletPage from './components/WalletPage';
 
 
 
@@ -79,6 +80,7 @@ function App() {
         <Route path='/GovernmentPage' element={<GovernmentPage />} />
         <Route path='/profile' element={<UserProfile />} />
         <Route path="/schemes" element={<Schemes />} />
+        <Route path="/seller/wallet" element={<WalletPage />} />
 
       </Routes>
     </Router>

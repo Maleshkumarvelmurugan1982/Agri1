@@ -90,6 +90,13 @@ app.use("/farmerProducts", farmerProductRouter);
 // ✅ Order routes - USE THE ROUTER
 app.use("/sellerorder", sellerOrderRouter); // This handles all /sellerorder/* routes
 app.use("/farmerorder", farmerOrderRouter);
+const walletRoutes = require('./routes/walletRoutes');
+app.use('/', walletRoutes);
+const orderRoutes = require('./routes/orderRoutes');
+app.use('/sellerorder', orderRoutes);
+const walletRouter = require("./routes/wallet");
+app.use("/wallet", walletRouter);
+app.use("/transactions", walletRouter); // For transaction routes
 
 // Other routes
 app.use("/deliverypost", deliveryPostRouter);

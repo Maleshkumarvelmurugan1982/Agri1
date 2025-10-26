@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from "react";
-import "./OrderPage.css";
 import { useLocation, useNavigate } from "react-router-dom";
+import "./OrderPage.css";
 
 function OrderPage() {
   const location = useLocation();
   const navigate = useNavigate();
   const queryParams = new URLSearchParams(location.search);
+
   const [formData, setFormData] = useState({
     productImage: queryParams.get("image") || "",
     productName: queryParams.get("item") || "",
@@ -23,24 +24,28 @@ function OrderPage() {
   const [availableQuantity, setAvailableQuantity] = useState(0);
   const [quantityError, setQuantityError] = useState("");
   const [productId, setProductId] = useState("");
-  const [farmerId, setFarmerId] = useState(""); // Farmer who owns the product
-  const [sellerId, setSellerId] = useState(""); // ✅ Add sellerId state (logged-in seller)
+  const [farmerId, setFarmerId] = useState("");
+  const [sellerId, setSellerId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Payment states
+  const [paymentMethod, setPaymentMethod] = useState("wallet");
+  const [walletBalance, setWalletBalance] = useState(0);
+  const [cardDetails, setCardDetails] = useState({
+    cardNumber: "",
+    cardHolder: "",
+    expiryDate: "",
+    cvv: "",
+  });
 
   const BASE_URL = "http://localhost:8070";
 
-  // ✅ STEP 1: Get logged-in seller's ID from token
+  // Fetch logged-in seller data
   useEffect(() => {
     const fetchSellerData = async () => {
       try {
         const token = localStorage.getItem("token");
-        
-        if (!token) {
-          console.error("No token found - user not logged in");
-          alert("Please log in to place an order");
-          navigate("/login"); // Redirect to login if no token
-          return;
-        }
+        if (!token) return navigate("/login");
 
         const res = await fetch(`${BASE_URL}/seller/userdata`, {
           method: "POST",
@@ -49,205 +54,216 @@ function OrderPage() {
         });
 
         const data = await res.json();
-        
         if (data.status === "ok" && data.data) {
           setSellerId(data.data._id);
-          console.log("✅ Logged-in Seller ID:", data.data._id);
-          
-          // Pre-fill form with seller's data
-          setFormData(prev => ({
+          setWalletBalance(data.data.walletBalance || 0);
+          setFormData((prev) => ({
             ...prev,
             email: data.data.email || prev.email,
             district: data.data.district || prev.district,
             mobile: data.data.mobile || prev.mobile,
           }));
         } else {
-          console.error("Failed to fetch seller data:", data);
-          alert("Failed to load user data. Please log in again.");
           navigate("/login");
         }
       } catch (err) {
         console.error("Error fetching seller data:", err);
-        alert("Error loading user data. Please try again.");
+        navigate("/login");
       }
     };
 
     fetchSellerData();
   }, [navigate]);
 
-  // ✅ STEP 2: Fetch product details and farmerId
+  // Fetch product details
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    
-    const priceFromUrl = params.get("price");
-    console.log("Price from URL:", priceFromUrl);
-    
-    if (priceFromUrl) {
-      setUnitPrice(Number(priceFromUrl));
-      console.log("Unit price set from URL:", Number(priceFromUrl));
-    }
-    
-    const productNameFromUrl = params.get("item");
-    console.log("Product name from URL:", productNameFromUrl);
-    
-    if (productNameFromUrl) {
-      fetch(`${BASE_URL}/product/name/${productNameFromUrl}`)
-        .then((response) => {
-          if (!response.ok) {
-            throw new Error("Product not found");
-          }
-          return response.json();
-        })
-        .then((product) => {
-          console.log("Fetched product:", product);
-          
-          if (product) {
-            if (product.price) setUnitPrice(Number(product.price));
-            if (product.quantity) setAvailableQuantity(Number(product.quantity));
-            if (product._id) setProductId(product._id);
-            
-            // ✅ CRITICAL: Get farmerId from product
-            if (product.farmerId) {
-              // If farmerId is populated (object), get the _id
-              const farmerIdValue = typeof product.farmerId === 'object' 
-                ? product.farmerId._id 
-                : product.farmerId;
-              setFarmerId(farmerIdValue);
-              console.log("✅ Farmer ID from product:", farmerIdValue);
-            } else if (product.userId) {
-              // Some schemas use userId instead of farmerId
-              const userIdValue = typeof product.userId === 'object' 
-                ? product.userId._id 
-                : product.userId;
-              setFarmerId(userIdValue);
-              console.log("✅ Farmer ID (from userId):", userIdValue);
-            } else {
-              console.warn("⚠️ No farmerId found in product");
-            }
-            
-            console.log("Unit price set from API:", Number(product.price));
-            console.log("Available quantity:", Number(product.quantity));
-          }
-        })
-        .catch((error) => {
-          console.error("Error fetching product:", error);
-          alert("Failed to load product details. Please try again.");
-        });
-    }
-  }, [location.search]);
+    const productNameFromUrl = queryParams.get("item");
+    const priceFromUrl = queryParams.get("price");
+    if (priceFromUrl) setUnitPrice(Number(priceFromUrl));
+
+    if (!productNameFromUrl) return;
+
+    fetch(`${BASE_URL}/product/name/${productNameFromUrl}`)
+      .then((res) => {
+        if (!res.ok) throw new Error("Product not found");
+        return res.json();
+      })
+      .then((product) => {
+        if (!product) return;
+        if (product.price) setUnitPrice(Number(product.price));
+        if (product.quantity) setAvailableQuantity(Number(product.quantity));
+        if (product._id) setProductId(product._id);
+
+        const farmerIdValue =
+          typeof product.farmerId === "object"
+            ? product.farmerId._id
+            : product.farmerId || product.userId;
+
+        if (farmerIdValue) setFarmerId(farmerIdValue);
+      })
+      .catch(console.error);
+  }, [queryParams]);
 
   const handleChange = (e) => {
     const { name, value } = e.target;
-    
     if (name === "quantity") {
       const quantity = Number(value) || 0;
-      
-      if (quantity > availableQuantity) {
-        setQuantityError(`Only ${availableQuantity} kg available in stock!`);
-      } else {
-        setQuantityError("");
-      }
-      
+      if (quantity > availableQuantity) setQuantityError(`Only ${availableQuantity} kg available!`);
+      else setQuantityError("");
+
       const totalPrice = quantity * unitPrice;
-      
-      console.log("Quantity:", quantity, "Unit Price:", unitPrice, "Total:", totalPrice);
-      
-      setFormData((prevFormData) => ({
-        ...prevFormData,
+      setFormData((prev) => ({
+        ...prev,
         quantity: value,
         price: totalPrice > 0 ? totalPrice.toFixed(2) : "",
       }));
       return;
     }
+    setFormData((prev) => ({ ...prev, [name]: value }));
+  };
 
-    setFormData((prevFormData) => ({
-      ...prevFormData,
-      [name]: value,
-    }));
+  const handleCardChange = (e) => {
+    const { name, value } = e.target;
+    setCardDetails((prev) => ({ ...prev, [name]: value }));
+  };
+
+  const checkSufficientBalance = () => {
+    const totalPrice = Number(formData.price);
+    return walletBalance >= totalPrice;
+  };
+
+  const formatCardNumber = (value) => {
+    const cleaned = value.replace(/\s/g, "");
+    const chunks = cleaned.match(/.{1,4}/g);
+    return chunks ? chunks.join(" ") : cleaned;
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (quantityError) {
-      alert("Please enter a valid quantity within available stock!");
-      return;
+
+    if (quantityError) return alert("Please enter a valid quantity!");
+
+    if (!formData.quantity || !formData.district || !formData.company || !formData.mobile || !formData.email || !formData.address || !formData.expireDate) {
+      return alert("Please fill in all required fields!");
     }
 
-    if (!formData.quantity || !formData.district || !formData.company || 
-        !formData.mobile || !formData.email || !formData.address || !formData.expireDate) {
-      alert("Please fill in all required fields!");
-      return;
+    if (!sellerId) return navigate("/login");
+    if (!farmerId) return alert("Product owner info missing!");
+
+    const totalPrice = Number(formData.price);
+
+    if (paymentMethod === "wallet" && !checkSufficientBalance()) {
+      return alert(`Insufficient wallet balance!\nOrder Total: Rs.${totalPrice}\nWallet: Rs.${walletBalance}`);
     }
 
-    // ✅ Validate sellerId
-    if (!sellerId) {
-      alert("User session expired. Please log in again.");
-      console.error("Missing sellerId - user not logged in");
-      navigate("/login");
-      return;
-    }
-
-    // ✅ Validate farmerId
-    if (!farmerId) {
-      alert("Product owner information is missing. Please try again or contact support.");
-      console.error("Missing farmerId - cannot create order");
-      return;
+    if (paymentMethod === "card") {
+      if (!cardDetails.cardNumber || !cardDetails.cardHolder || !cardDetails.expiryDate || !cardDetails.cvv) {
+        return alert("Please fill in all card details!");
+      }
+      if (cardDetails.cardNumber.length < 16) return alert("Card number must be 16 digits");
+      if (cardDetails.cvv.length < 3) return alert("CVV must be 3 digits");
     }
 
     setIsSubmitting(true);
 
     try {
-      // ✅ Create the order with BOTH sellerId and farmerId
       const orderData = {
         name: formData.company,
         item: formData.productName,
         productImage: formData.productImage,
         category: "vegetable",
         quantity: Number(formData.quantity),
-        price: Number(formData.price),
+        price: totalPrice,
         district: formData.district,
         company: formData.company,
         mobile: formData.mobile,
         email: formData.email,
         address: formData.address,
-        postedDate: new Date().toISOString().split('T')[0],
+        postedDate: new Date().toISOString().split("T")[0],
         expireDate: formData.expireDate,
-        status: "pending",
-        sellerId: sellerId, // ✅ CRITICAL: Seller placing the order
-        farmerId: farmerId, // ✅ CRITICAL: Farmer who owns the product
+        sellerId,
+        farmerId,
+        paymentMethod,
+        paymentStatus: paymentMethod === "wallet" ? "completed" : "pending",
+        isPaid: paymentMethod === "wallet" ? true : false,
       };
 
-      console.log("📦 Submitting order with data:", orderData);
-      console.log("   Seller ID:", sellerId);
-      console.log("   Farmer ID:", farmerId);
+      console.log("🚀 Sending order data:", orderData);
+      console.log("💰 Payment Method:", paymentMethod);
+      console.log("✅ Payment Status:", orderData.paymentStatus);
 
-      // Submit order to backend
-      const orderResponse = await fetch(`${BASE_URL}/sellerorder/add`, {
+      const res = await fetch(`${BASE_URL}/sellerorder/add`, {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
+        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(orderData),
       });
 
-      const orderResult = await orderResponse.json();
-      console.log("Order response:", orderResult);
+      const result = await res.json();
+      if (!res.ok) throw new Error(result.message || "Order failed");
 
-      if (!orderResponse.ok) {
-        throw new Error(orderResult.message || orderResult.error || "Failed to create order");
+      // Reduce product quantity immediately after order is placed
+      try {
+        const productUpdateRes = await fetch(`${BASE_URL}/product/${productId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            quantity: availableQuantity - Number(formData.quantity)
+          })
+        });
+
+        if (!productUpdateRes.ok) {
+          console.error("Failed to update product quantity");
+        } else {
+          console.log(`✅ Product quantity reduced by ${formData.quantity} kg`);
+        }
+      } catch (err) {
+        console.error("Error updating product quantity:", err);
       }
 
-      console.log("✅ Order created successfully:", orderResult);
+      // Update wallet balance state immediately after wallet payment
+      let newBalance = walletBalance;
+      if (paymentMethod === "wallet") {
+        if (result.transaction?.balanceAfter !== undefined) {
+          newBalance = result.transaction.balanceAfter;
+        } else {
+          newBalance = walletBalance - totalPrice;
+        }
+        setWalletBalance(newBalance);
 
-      alert("Order placed successfully! Waiting for farmer approval.");
-      
-      // Navigate to seller page
+        // Create wallet transaction for the order payment
+        try {
+          const deductRes = await fetch(`${BASE_URL}/wallet/deduct`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              sellerId: sellerId,
+              amount: totalPrice,
+              description: `Order payment for ${formData.productName} (${formData.quantity} kg)`,
+              paymentMethod: "wallet",
+              relatedOrder: result.order?._id || null
+            })
+          });
+
+          const deductResult = await deductRes.json();
+          if (deductResult.status === "ok") {
+            console.log("✅ Wallet transaction created successfully");
+          }
+        } catch (err) {
+          console.error("Error creating wallet transaction:", err);
+        }
+      }
+
+      // Success alert
+      if (paymentMethod === "wallet") {
+        alert(`Order placed successfully!\nAmount Paid: Rs.${totalPrice.toFixed(2)}\nNew Wallet Balance: Rs.${newBalance.toFixed(2)}`);
+      } else {
+        alert(`Order placed successfully!\nAmount Paid: Rs.${totalPrice.toFixed(2)}\nPayment Method: Card`);
+      }
+
       navigate("/regseller");
-      
-    } catch (error) {
-      console.error("❌ Error submitting order:", error);
-      alert(`Failed to place order: ${error.message}`);
+    } catch (err) {
+      console.error("Error submitting order:", err);
+      alert(`Failed to place order: ${err.message}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -259,164 +275,68 @@ function OrderPage() {
       <form onSubmit={handleSubmit}>
         {formData.productImage && (
           <div className="image-preview">
-            <img 
-              src={`${BASE_URL}${formData.productImage}`} 
+            <img
+              src={`${BASE_URL}${formData.productImage}`}
               alt="Product"
-              onError={(e) => {
-                e.target.onerror = null;
-                e.target.src = 'https://via.placeholder.com/200?text=No+Image';
-              }}
+              onError={(e) => (e.target.src = "https://via.placeholder.com/200?text=No+Image")}
             />
           </div>
         )}
 
-        {formData.productName && (
-          <>
-            <div className="input-field-container">
-              <p>Product Name</p>
-            </div>
-            <div className="category-display">
-              <h4>{formData.productName}</h4>
-            </div>
-          </>
-        )}
+        {/* Product Info */}
+        <div className="input-field-container"><p>Product Name</p></div>
+        <div className="category-display"><h4>{formData.productName}</h4></div>
 
-        {unitPrice > 0 && (
-          <>
-            <div className="input-field-container">
-              <p>Unit Price (Rs. per kg)</p>
-            </div>
-            <div className="category-display">
-              <h4>Rs. {unitPrice.toFixed(2)}</h4>
-            </div>
-          </>
-        )}
+        <div className="input-field-container"><p>Unit Price (Rs.)</p></div>
+        <div className="category-display"><h4>Rs. {unitPrice.toFixed(2)}</h4></div>
 
-        {availableQuantity > 0 && (
-          <>
-            <div className="input-field-container">
-              <p>Available Stock</p>
-            </div>
-            <div className="category-display">
-              <h4>{availableQuantity} kg</h4>
-            </div>
-          </>
-        )}
+        <div className="input-field-container"><p>Available Stock</p></div>
+        <div className="category-display"><h4>{availableQuantity} kg</h4></div>
 
-        <div className="input-field-container">
-          <p>Quantity (kg) <span className="required">*</span></p>
+        <div className="input-field-container"><p>Quantity (kg) *</p></div>
+        <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} min="0.1" step="0.1" max={availableQuantity} className={quantityError ? "input-error" : ""} required />
+        {quantityError && <div className="error-message">{quantityError}</div>}
+
+        <div className="input-field-container"><p>Total Price (Rs.)</p></div>
+        <input type="text" name="price" value={formData.price} readOnly className="readonly-field" />
+
+        {/* Payment Method */}
+        <div className="input-field-container"><p>Payment Method *</p></div>
+        <div className="payment-method-container">
+          <label>
+            <input type="radio" name="paymentMethod" value="wallet" checked={paymentMethod === "wallet"} onChange={(e) => setPaymentMethod(e.target.value)} />
+            Wallet (Balance: Rs. {walletBalance.toFixed(2)})
+          </label>
+          <label>
+            <input type="radio" name="paymentMethod" value="card" checked={paymentMethod === "card"} onChange={(e) => setPaymentMethod(e.target.value)} />
+            Debit/Credit Card
+          </label>
         </div>
-        <input
-          type="number"
-          name="quantity"
-          placeholder="Enter Quantity"
-          value={formData.quantity}
-          onChange={handleChange}
-          min="0.1"
-          step="0.1"
-          max={availableQuantity}
-          className={quantityError ? "input-error" : ""}
-          required
-        />
-        {quantityError && (
-          <div className="error-message">
-            <p>{quantityError}</p>
+
+        {/* Card details */}
+        {paymentMethod === "card" && (
+          <div className="card-details-container">
+            <input type="text" name="cardNumber" placeholder="Card Number" value={formatCardNumber(cardDetails.cardNumber)} onChange={handleCardChange} maxLength="19" required />
+            <input type="text" name="cardHolder" placeholder="Card Holder" value={cardDetails.cardHolder} onChange={handleCardChange} required />
+            <input type="text" name="expiryDate" placeholder="MM/YY" value={cardDetails.expiryDate} onChange={handleCardChange} maxLength="5" required />
+            <input type="password" name="cvv" placeholder="CVV" value={cardDetails.cvv} onChange={handleCardChange} maxLength="3" required />
           </div>
         )}
 
-        <div className="input-field-container">
-          <p>Total Price (Rs.)</p>
-        </div>
-        <input
-          type="text"
-          name="price"
-          placeholder="Total Price"
-          value={formData.price}
-          readOnly
-          className="readonly-field"
-        />
+        {/* Other fields */}
+        <input type="text" name="district" placeholder="District" value={formData.district} onChange={handleChange} required />
+        <input type="text" name="company" placeholder="Company" value={formData.company} onChange={handleChange} required />
+        <input type="text" name="mobile" placeholder="Mobile" value={formData.mobile} onChange={handleChange} required />
+        <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required />
+        <textarea name="address" placeholder="Address" value={formData.address} onChange={handleChange} rows="3" required></textarea>
+        <input type="date" name="expireDate" value={formData.expireDate} onChange={handleChange} min={new Date().toISOString().split("T")[0]} required />
 
-        <div className="input-field-container">
-          <p>District <span className="required">*</span></p>
-        </div>
-        <input
-          type="text"
-          name="district"
-          placeholder="District"
-          value={formData.district}
-          onChange={handleChange}
-          required
-        />
-
-        <div className="input-field-container">
-          <p>Company <span className="required">*</span></p>
-        </div>
-        <input
-          type="text"
-          name="company"
-          placeholder="Company"
-          value={formData.company}
-          onChange={handleChange}
-          required
-        />
-
-        <div className="input-field-container">
-          <p>Contact Number <span className="required">*</span></p>
-        </div>
-        <input
-          type="text"
-          name="mobile"
-          placeholder="Mobile"
-          value={formData.mobile}
-          onChange={handleChange}
-          pattern="[0-9]{10}"
-          title="Please enter a valid 10-digit mobile number"
-          required
-        />
-
-        <div className="input-field-container">
-          <p>Email Address <span className="required">*</span></p>
-        </div>
-        <input
-          type="email"
-          name="email"
-          placeholder="Email"
-          value={formData.email}
-          onChange={handleChange}
-          required
-        />
-
-        <div className="input-field-container">
-          <p>Living Address <span className="required">*</span></p>
-        </div>
-        <textarea
-          name="address"
-          placeholder="Address"
-          value={formData.address}
-          onChange={handleChange}
-          rows="3"
-          required
-        ></textarea>
-
-        <div className="input-field-container">
-          <p>Set Order Expire Date <span className="required">*</span></p>
-        </div>
-        <input
-          type="date"
-          name="expireDate"
-          placeholder="Expire Date"
-          value={formData.expireDate}
-          onChange={handleChange}
-          min={new Date().toISOString().split('T')[0]}
-          required
-        />
-
-        <button type="submit" disabled={isSubmitting || quantityError || !sellerId}>
-          {isSubmitting ? "Placing Order..." : "Place Order"}
+        <button type="submit" disabled={isSubmitting || quantityError || (paymentMethod === "wallet" && !checkSufficientBalance())}>
+          {isSubmitting ? "Processing Payment..." : `Place Order & Pay Rs. ${formData.price || '0'}`}
         </button>
       </form>
     </div>
   );
 }
 
-export default OrderPage
+export default OrderPage;
