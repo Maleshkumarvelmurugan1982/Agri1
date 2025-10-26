@@ -28,7 +28,6 @@ function OrderPage() {
   const [sellerId, setSellerId] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Payment states
   const [paymentMethod, setPaymentMethod] = useState("wallet");
   const [walletBalance, setWalletBalance] = useState(0);
   const [cardDetails, setCardDetails] = useState({
@@ -71,7 +70,6 @@ function OrderPage() {
         navigate("/login");
       }
     };
-
     fetchSellerData();
   }, [navigate]);
 
@@ -100,6 +98,14 @@ function OrderPage() {
             : product.farmerId || product.userId;
 
         if (farmerIdValue) setFarmerId(farmerIdValue);
+
+        // ✅ Use Cloudinary URL directly
+        if (product.productImage) {
+          setFormData((prev) => ({
+            ...prev,
+            productImage: product.productImage, // full Cloudinary URL
+          }));
+        }
       })
       .catch(console.error);
   }, [queryParams]);
@@ -108,7 +114,8 @@ function OrderPage() {
     const { name, value } = e.target;
     if (name === "quantity") {
       const quantity = Number(value) || 0;
-      if (quantity > availableQuantity) setQuantityError(`Only ${availableQuantity} kg available!`);
+      if (quantity > availableQuantity)
+        setQuantityError(`Only ${availableQuantity} kg available!`);
       else setQuantityError("");
 
       const totalPrice = quantity * unitPrice;
@@ -140,24 +147,36 @@ function OrderPage() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-
     if (quantityError) return alert("Please enter a valid quantity!");
-
-    if (!formData.quantity || !formData.district || !formData.company || !formData.mobile || !formData.email || !formData.address || !formData.expireDate) {
+    if (
+      !formData.quantity ||
+      !formData.district ||
+      !formData.company ||
+      !formData.mobile ||
+      !formData.email ||
+      !formData.address ||
+      !formData.expireDate
+    ) {
       return alert("Please fill in all required fields!");
     }
-
     if (!sellerId) return navigate("/login");
     if (!farmerId) return alert("Product owner info missing!");
 
     const totalPrice = Number(formData.price);
 
     if (paymentMethod === "wallet" && !checkSufficientBalance()) {
-      return alert(`Insufficient wallet balance!\nOrder Total: Rs.${totalPrice}\nWallet: Rs.${walletBalance}`);
+      return alert(
+        `Insufficient wallet balance!\nOrder Total: Rs.${totalPrice}\nWallet: Rs.${walletBalance}`
+      );
     }
 
     if (paymentMethod === "card") {
-      if (!cardDetails.cardNumber || !cardDetails.cardHolder || !cardDetails.expiryDate || !cardDetails.cvv) {
+      if (
+        !cardDetails.cardNumber ||
+        !cardDetails.cardHolder ||
+        !cardDetails.expiryDate ||
+        !cardDetails.cvv
+      ) {
         return alert("Please fill in all card details!");
       }
       if (cardDetails.cardNumber.length < 16) return alert("Card number must be 16 digits");
@@ -170,7 +189,7 @@ function OrderPage() {
       const orderData = {
         name: formData.company,
         item: formData.productName,
-        productImage: formData.productImage,
+        productImage: formData.productImage, // ✅ Cloudinary URL
         category: "vegetable",
         quantity: Number(formData.quantity),
         price: totalPrice,
@@ -189,8 +208,6 @@ function OrderPage() {
       };
 
       console.log("🚀 Sending order data:", orderData);
-      console.log("💰 Payment Method:", paymentMethod);
-      console.log("✅ Payment Status:", orderData.paymentStatus);
 
       const res = await fetch(`${BASE_URL}/sellerorder/add`, {
         method: "POST",
@@ -201,64 +218,47 @@ function OrderPage() {
       const result = await res.json();
       if (!res.ok) throw new Error(result.message || "Order failed");
 
-      // Reduce product quantity immediately after order is placed
+      // Reduce product quantity immediately
       try {
-        const productUpdateRes = await fetch(`${BASE_URL}/product/${productId}`, {
+        await fetch(`${BASE_URL}/product/${productId}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
-            quantity: availableQuantity - Number(formData.quantity)
-          })
+            quantity: availableQuantity - Number(formData.quantity),
+          }),
         });
-
-        if (!productUpdateRes.ok) {
-          console.error("Failed to update product quantity");
-        } else {
-          console.log(`✅ Product quantity reduced by ${formData.quantity} kg`);
-        }
       } catch (err) {
         console.error("Error updating product quantity:", err);
       }
 
-      // Update wallet balance state immediately after wallet payment
+      // Update wallet if paid
       let newBalance = walletBalance;
       if (paymentMethod === "wallet") {
-        if (result.transaction?.balanceAfter !== undefined) {
-          newBalance = result.transaction.balanceAfter;
-        } else {
-          newBalance = walletBalance - totalPrice;
-        }
+        newBalance = walletBalance - totalPrice;
         setWalletBalance(newBalance);
 
-        // Create wallet transaction for the order payment
         try {
-          const deductRes = await fetch(`${BASE_URL}/wallet/deduct`, {
+          await fetch(`${BASE_URL}/wallet/deduct`, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({
-              sellerId: sellerId,
+              sellerId,
               amount: totalPrice,
               description: `Order payment for ${formData.productName} (${formData.quantity} kg)`,
               paymentMethod: "wallet",
-              relatedOrder: result.order?._id || null
-            })
+              relatedOrder: result.order?._id || null,
+            }),
           });
-
-          const deductResult = await deductRes.json();
-          if (deductResult.status === "ok") {
-            console.log("✅ Wallet transaction created successfully");
-          }
         } catch (err) {
           console.error("Error creating wallet transaction:", err);
         }
       }
 
-      // Success alert
-      if (paymentMethod === "wallet") {
-        alert(`Order placed successfully!\nAmount Paid: Rs.${totalPrice.toFixed(2)}\nNew Wallet Balance: Rs.${newBalance.toFixed(2)}`);
-      } else {
-        alert(`Order placed successfully!\nAmount Paid: Rs.${totalPrice.toFixed(2)}\nPayment Method: Card`);
-      }
+      alert(
+        `Order placed successfully!\nAmount Paid: Rs.${totalPrice.toFixed(
+          2
+        )}\nPayment Method: ${paymentMethod === "wallet" ? "Wallet" : "Card"}`
+      );
 
       navigate("/regseller");
     } catch (err) {
@@ -276,39 +276,87 @@ function OrderPage() {
         {formData.productImage && (
           <div className="image-preview">
             <img
-              src={`${BASE_URL}${formData.productImage}`}
+              src={formData.productImage} // ✅ Cloudinary URL
               alt="Product"
-              onError={(e) => (e.target.src = "https://via.placeholder.com/200?text=No+Image")}
+              onError={(e) =>
+                (e.target.src = "https://via.placeholder.com/200?text=No+Image")
+              }
             />
           </div>
         )}
 
         {/* Product Info */}
-        <div className="input-field-container"><p>Product Name</p></div>
-        <div className="category-display"><h4>{formData.productName}</h4></div>
+        <div className="input-field-container">
+          <p>Product Name</p>
+        </div>
+        <div className="category-display">
+          <h4>{formData.productName}</h4>
+        </div>
 
-        <div className="input-field-container"><p>Unit Price (Rs.)</p></div>
-        <div className="category-display"><h4>Rs. {unitPrice.toFixed(2)}</h4></div>
+        <div className="input-field-container">
+          <p>Unit Price (Rs.)</p>
+        </div>
+        <div className="category-display">
+          <h4>Rs. {unitPrice.toFixed(2)}</h4>
+        </div>
 
-        <div className="input-field-container"><p>Available Stock</p></div>
-        <div className="category-display"><h4>{availableQuantity} kg</h4></div>
+        <div className="input-field-container">
+          <p>Available Stock</p>
+        </div>
+        <div className="category-display">
+          <h4>{availableQuantity} kg</h4>
+        </div>
 
-        <div className="input-field-container"><p>Quantity (kg) *</p></div>
-        <input type="number" name="quantity" value={formData.quantity} onChange={handleChange} min="0.1" step="0.1" max={availableQuantity} className={quantityError ? "input-error" : ""} required />
+        <div className="input-field-container">
+          <p>Quantity (kg) *</p>
+        </div>
+        <input
+          type="number"
+          name="quantity"
+          value={formData.quantity}
+          onChange={handleChange}
+          min="0.1"
+          step="0.1"
+          max={availableQuantity}
+          className={quantityError ? "input-error" : ""}
+          required
+        />
         {quantityError && <div className="error-message">{quantityError}</div>}
 
-        <div className="input-field-container"><p>Total Price (Rs.)</p></div>
-        <input type="text" name="price" value={formData.price} readOnly className="readonly-field" />
+        <div className="input-field-container">
+          <p>Total Price (Rs.)</p>
+        </div>
+        <input
+          type="text"
+          name="price"
+          value={formData.price}
+          readOnly
+          className="readonly-field"
+        />
 
         {/* Payment Method */}
-        <div className="input-field-container"><p>Payment Method *</p></div>
+        <div className="input-field-container">
+          <p>Payment Method *</p>
+        </div>
         <div className="payment-method-container">
           <label>
-            <input type="radio" name="paymentMethod" value="wallet" checked={paymentMethod === "wallet"} onChange={(e) => setPaymentMethod(e.target.value)} />
+            <input
+              type="radio"
+              name="paymentMethod"
+              value="wallet"
+              checked={paymentMethod === "wallet"}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+            />
             Wallet (Balance: Rs. {walletBalance.toFixed(2)})
           </label>
           <label>
-            <input type="radio" name="paymentMethod" value="card" checked={paymentMethod === "card"} onChange={(e) => setPaymentMethod(e.target.value)} />
+            <input
+              type="radio"
+              name="paymentMethod"
+              value="card"
+              checked={paymentMethod === "card"}
+              onChange={(e) => setPaymentMethod(e.target.value)}
+            />
             Debit/Credit Card
           </label>
         </div>
@@ -316,23 +364,105 @@ function OrderPage() {
         {/* Card details */}
         {paymentMethod === "card" && (
           <div className="card-details-container">
-            <input type="text" name="cardNumber" placeholder="Card Number" value={formatCardNumber(cardDetails.cardNumber)} onChange={handleCardChange} maxLength="19" required />
-            <input type="text" name="cardHolder" placeholder="Card Holder" value={cardDetails.cardHolder} onChange={handleCardChange} required />
-            <input type="text" name="expiryDate" placeholder="MM/YY" value={cardDetails.expiryDate} onChange={handleCardChange} maxLength="5" required />
-            <input type="password" name="cvv" placeholder="CVV" value={cardDetails.cvv} onChange={handleCardChange} maxLength="3" required />
+            <input
+              type="text"
+              name="cardNumber"
+              placeholder="Card Number"
+              value={formatCardNumber(cardDetails.cardNumber)}
+              onChange={handleCardChange}
+              maxLength="19"
+              required
+            />
+            <input
+              type="text"
+              name="cardHolder"
+              placeholder="Card Holder"
+              value={cardDetails.cardHolder}
+              onChange={handleCardChange}
+              required
+            />
+            <input
+              type="text"
+              name="expiryDate"
+              placeholder="MM/YY"
+              value={cardDetails.expiryDate}
+              onChange={handleCardChange}
+              maxLength="5"
+              required
+            />
+            <input
+              type="password"
+              name="cvv"
+              placeholder="CVV"
+              value={cardDetails.cvv}
+              onChange={handleCardChange}
+              maxLength="3"
+              required
+            />
           </div>
         )}
 
         {/* Other fields */}
-        <input type="text" name="district" placeholder="District" value={formData.district} onChange={handleChange} required />
-        <input type="text" name="company" placeholder="Company" value={formData.company} onChange={handleChange} required />
-        <input type="text" name="mobile" placeholder="Mobile" value={formData.mobile} onChange={handleChange} required />
-        <input type="email" name="email" placeholder="Email" value={formData.email} onChange={handleChange} required />
-        <textarea name="address" placeholder="Address" value={formData.address} onChange={handleChange} rows="3" required></textarea>
-        <input type="date" name="expireDate" value={formData.expireDate} onChange={handleChange} min={new Date().toISOString().split("T")[0]} required />
+        <input
+          type="text"
+          name="district"
+          placeholder="District"
+          value={formData.district}
+          onChange={handleChange}
+          required
+        />
+        <input
+          type="text"
+          name="company"
+          placeholder="Company"
+          value={formData.company}
+          onChange={handleChange}
+          required
+        />
+        <input
+          type="text"
+          name="mobile"
+          placeholder="Mobile"
+          value={formData.mobile}
+          onChange={handleChange}
+          required
+        />
+        <input
+          type="email"
+          name="email"
+          placeholder="Email"
+          value={formData.email}
+          onChange={handleChange}
+          required
+        />
+        <textarea
+          name="address"
+          placeholder="Address"
+          value={formData.address}
+          onChange={handleChange}
+          rows="3"
+          required
+        ></textarea>
+        <input
+          type="date"
+          name="expireDate"
+          value={formData.expireDate}
+          onChange={handleChange}
+          min={new Date().toISOString().split("T")[0]}
+          required
+        />
 
-        <button type="submit" disabled={isSubmitting || quantityError || (paymentMethod === "wallet" && !checkSufficientBalance())}>
-          {isSubmitting ? "Processing Payment..." : `Place Order & Pay Rs. ${formData.price || '0'}`}
+        <button
+          type="submit"
+          disabled={
+            isSubmitting ||
+            quantityError ||
+            (paymentMethod === "wallet" && !checkSufficientBalance())
+          }
+        >
+          {isSubmitting
+            ? "Processing Payment..."
+            : `Place Order & Pay Rs. ${formData.price || "0"}`}
         </button>
       </form>
     </div>

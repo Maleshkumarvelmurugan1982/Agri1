@@ -32,6 +32,21 @@ function RegDeliverymanPage() {
 
   const BASE_URL = "http://localhost:8070";
 
+  // Helper function to get the correct image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) {
+      return 'https://via.placeholder.com/150?text=No+Image';
+    }
+    
+    // If it's already a full URL (starts with http:// or https://), return as is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    // If it's a relative path, prepend BASE_URL
+    return `${BASE_URL}${imagePath}`;
+  };
+
   const formatDate = (dateString) => {
     if (!dateString) return "Date not available";
     const date = new Date(dateString);
@@ -265,7 +280,7 @@ function RegDeliverymanPage() {
         {orders.map((order) => (
           <div key={order._id} className="order-item">
             <img
-              src={`${BASE_URL}${order.productImage}`}
+              src={getImageUrl(order.productImage)}
               alt={order.item}
               className="order-image"
               onError={(e) => {
@@ -300,7 +315,7 @@ function RegDeliverymanPage() {
         {orders.map((order) => (
           <div key={order._id} className="order-item">
             <img
-              src={`${BASE_URL}${order.productImage}`}
+              src={getImageUrl(order.productImage)}
               alt={order.item}
               className="order-image"
               onError={(e) => {
@@ -367,13 +382,6 @@ function RegDeliverymanPage() {
         <div className="categories-div">
           <RegCategories />
         </div>
-      </div>
-
-      {/* Salary Section */}
-      <div className="salary-section" style={{ margin: "20px", textAlign: "center" }}>
-        <button className="view-salary-button" onClick={() => setShowSalary(true)}>
-          <FontAwesomeIcon icon={faMoneyBillWave} /> Your Salary Provided by Government
-        </button>
       </div>
 
       {showSalary && (
@@ -480,7 +488,7 @@ function RegDeliverymanPage() {
                     }}
                   >
                     <img 
-                      src={`${BASE_URL}${order.productImage}`}
+                      src={getImageUrl(order.productImage)}
                       alt={order.item}
                       style={{
                         width: '100%',

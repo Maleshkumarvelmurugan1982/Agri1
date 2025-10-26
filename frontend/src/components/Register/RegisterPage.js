@@ -1,10 +1,11 @@
 import React from "react";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import "./RegisterPage.css";
 import Navbar from "../Navbar/Navbar";
 
 export default function SignUp() {
+  const navigate = useNavigate();
   const {
     register,
     handleSubmit,
@@ -41,14 +42,18 @@ export default function SignUp() {
       });
 
       if (response.ok) {
-        alert("Registration Successful");
+        alert("Registration Successful! Redirecting to login page...");
+        // Redirect to login page after successful registration
+        setTimeout(() => {
+          navigate("/login");
+        }, 1500); // 1.5 second delay to allow user to see success message
       } else {
         const errorData = await response.json();
         alert(errorData.error || "Registration failed");
       }
     } catch (error) {
       console.error(error);
-      alert("Registration failed");
+      alert("Registration failed. Please try again.");
     }
   };
 

@@ -36,6 +36,21 @@ function GovernmentPage() {
 
   const BASE_URL = "http://localhost:8070";
 
+  // Helper function to get the correct image URL
+  const getImageUrl = (imagePath) => {
+    if (!imagePath) {
+      return 'https://via.placeholder.com/150?text=No+Image';
+    }
+    
+    // If it's already a full URL (starts with http:// or https://), return as is
+    if (imagePath.startsWith('http://') || imagePath.startsWith('https://')) {
+      return imagePath;
+    }
+    
+    // If it's a relative path, prepend BASE_URL
+    return `${BASE_URL}${imagePath}`;
+  };
+
   // Fetch schemes on mount but only if logged in
   useEffect(() => {
     if (loggedIn) {
@@ -634,7 +649,7 @@ function GovernmentPage() {
                           }}
                         >
                           <img 
-                            src={`${BASE_URL}${order.productImage}`}
+                            src={getImageUrl(order.productImage)}
                             alt={order.item}
                             style={{
                               width: "100%",

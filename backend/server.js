@@ -1,4 +1,3 @@
-
 // server.js
 const express = require("express");
 const mongoose = require("mongoose");
@@ -32,8 +31,7 @@ app.use(
   })
 );
 
-// ✅ IMPORTANT: Serve uploaded images as static files
-// This must come before other routes
+// ✅ Serve local uploads (legacy support)
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // ✅ Create uploads directory if it doesn't exist
@@ -55,9 +53,9 @@ mongoose
 const farmerRouter = require("./routes/farmers");
 const sellerRouter = require("./routes/sellers");
 const deliverymanRouter = require("./routes/deliveryman");
-const productRouter = require("./routes/products"); // ✅ This has farmerId support
+const productRouter = require("./routes/products");
 const farmerProductRouter = require("./routes/farmerProducts");
-const sellerOrderRouter = require("./routes/sellerOrders"); // ✅ This has farmerId support
+const sellerOrderRouter = require("./routes/sellerOrders");
 const farmerOrderRouter = require("./routes/farmerOrders");
 const deliveryPostRouter = require("./routes/deliveryposts");
 const schemesRouter = require("./routes/schemes");
@@ -67,44 +65,32 @@ const authRouter = require("./routes/auth");
 const deliverymenAuthRouter = require("./routes/deliverymenAuth");
 const appliedSchemesRoutes = require("./routes/appliedSchemes");
 const salaryRoutes = require('./routes/salary');
-app.use('/salary', salaryRoutes);
+const walletRoutes = require('./routes/walletRoutes');
+const orderRoutes = require('./routes/orderRoutes');
+const walletRouter = require("./routes/wallet");
+const uploadRoute = require("./routes/uploadRoute"); // ✅ <-- Added Cloudinary upload route
 
 // -------------------- REGISTER ROUTES --------------------
-// ✅ Register routes in correct order (most specific first)
-
-// Authentication routes
+app.use('/salary', salaryRoutes);
 app.use("/auth", authRouter);
 app.use("/deliverymenAuth", deliverymenAuthRouter);
-
-// User routes
 app.use("/farmer", farmerRouter);
 app.use("/seller", sellerRouter);
 app.use("/deliveryman", deliverymanRouter);
 app.use("/user", userRouter);
 app.use("/deliverymen", deliverymenRouter);
-
-// ✅ Product routes - USE THE ROUTER, DON'T DEFINE ROUTES HERE
-app.use("/product", productRouter); // This handles all /product/* routes
+app.use("/product", productRouter);
 app.use("/farmerProducts", farmerProductRouter);
-
-// ✅ Order routes - USE THE ROUTER
-app.use("/sellerorder", sellerOrderRouter); // This handles all /sellerorder/* routes
+app.use("/sellerorder", sellerOrderRouter);
 app.use("/farmerorder", farmerOrderRouter);
-const walletRoutes = require('./routes/walletRoutes');
 app.use('/', walletRoutes);
-const orderRoutes = require('./routes/orderRoutes');
 app.use('/sellerorder', orderRoutes);
-const walletRouter = require("./routes/wallet");
 app.use("/wallet", walletRouter);
-app.use("/transactions", walletRouter); // For transaction routes
-
-// Other routes
+app.use("/transactions", walletRouter);
 app.use("/deliverypost", deliveryPostRouter);
 app.use("/schemes", schemesRouter);
 app.use("/appliedschemes", appliedSchemesRoutes);
-
-// ✅ REMOVED: Duplicate product routes that were here
-// All product routes are now handled by productRouter
+app.use("/api", uploadRoute); // ✅ <-- New route for uploading images
 
 // -------------------- HEALTH CHECK --------------------
 app.get("/", (req, res) => {
@@ -117,7 +103,6 @@ app.get("/", (req, res) => {
 });
 
 // -------------------- ERROR HANDLING --------------------
-// Handle multer errors
 app.use((err, req, res, next) => {
   if (err instanceof multer.MulterError) {
     if (err.code === "LIMIT_FILE_SIZE") {
@@ -143,6 +128,7 @@ app.listen(PORT, () => {
   console.log(`📁 Uploads directory: ${uploadsDir}`);
   console.log(`🖼️  Static files served at: http://localhost:${PORT}/uploads`);
   console.log(`\n📋 Available routes:`);
+  console.log(`   - POST   /api/upload (Cloudinary) ✅`);
   console.log(`   - POST   /product/add`);
   console.log(`   - GET    /product/farmer/:farmerId/category/:category`);
   console.log(`   - GET    /product/farmer/:farmerId`);
